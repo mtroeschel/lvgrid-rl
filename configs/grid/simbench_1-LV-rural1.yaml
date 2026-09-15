@@ -1,0 +1,15 @@
+# Startnetz: laendliches NS-Netz mit langen Straengen. Fuer ein
+# spannungsgetriebenes Kriterium (EN 50160) der aussagekraeftigste Einstieg.
+simbench_code: 1-LV-rural1--0-sw
+phase_model: balanced   # balanced | unbalanced; siehe Abschnitt 13
+# Netzanschlusspunkte: Vereinigung der Busse mit Last-, Erzeuger- oder
+# Speicherelement (Entscheidung D7). Die Ausnahmeliste fuer Ersatzeinspeiser
+# wird in M2 einmalig manuell geprueft und hier fixiert.
+connection_points:
+  element_types: [load, sgen, gen, storage, asymmetric_load, asymmetric_sgen]
+  exclude_buses: []
+  exclude_elements: []
+  require_nonzero_annual_energy: true
+  # Hash der resultierenden Busliste; verhindert, dass eine stille Aenderung
+  # die KPI unbemerkt verschiebt.
+  expected_hash: null

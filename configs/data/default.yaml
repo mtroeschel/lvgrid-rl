@@ -1,0 +1,19 @@
+# M1: SimBench zuerst, WPuQ ab M5.
+sources:
+  - name: simbench
+    profiles: [load, renewables, storage]
+sim_dt_min: 5          # zulaessig: 1, 2, 5, 10 -- 15 teilt 10 nicht (Abschnitt 6.6)
+resampling:
+  power: mean          # energieerhaltend
+  energy_counter: diff
+  irradiance: mean
+  temperature: mean
+  availability: majority
+  state: last
+upsampling:
+  power: piecewise_constant
+  irradiance: clear_sky_index
+gapfill:
+  max_linear_steps: 3
+  fallback: previous_same_weekday
+cache_dir: data/cache

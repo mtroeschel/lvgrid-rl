@@ -1,0 +1,28 @@
+# Macht das Repository zitierbar. GitHub liest die Datei und bietet
+# "Cite this repository" an; Zenodo uebernimmt die Metadaten beim Archivieren.
+# TODO: Name, ORCID und Affiliation ergaenzen.
+cff-version: 1.2.0
+message: "Wenn Sie diese Software verwenden, zitieren Sie sie bitte wie folgt."
+title: "lvgrid-rl: Trainingsumgebung für RL-Agenten zur Regelung von Niederspannungsnetzen"
+abstract: >-
+  Modulare Trainings- und Evaluationsumgebung für Reinforcement-Learning-Agenten,
+  die Spannungsbandverletzungen nach EN 50160 sowie Leitungs- und
+  Transformatorüberlastungen in Niederspannungsnetzen autonom ausregeln, durch
+  Abregelung von PV-Einspeisung, Verschiebung von Wärmepumpen- und Ladelasten
+  und Steuerung von Batteriespeichern. Netzsimulation mit pandapower und
+  SimBench, Agenten mit Stable-Baselines3.
+type: software
+license: MIT
+repository-code: "https://github.com/mtroeschel/lvgrid-rl"
+authors:
+  - given-names: "TODO"
+    family-names: "TODO"
+    # orcid: "https://orcid.org/0000-0000-0000-0000"
+    # affiliation: "TODO"
+keywords:
+  - reinforcement learning
+  - power systems
+  - low voltage distribution grid
+  - voltage control
+  - pandapower
+  - SimBench

@@ -1,0 +1,14 @@
+# Hydra-Root. Die Gruppen sind ab M0 vorhanden, aber bis auf grid/env noch leer;
+# das haelt die Konfigurationsstruktur stabil, waehrend die Module entstehen.
+defaults:
+  - grid: simbench_1-LV-rural1
+  - data: default
+  - scenario: null
+  - env: default
+  - agent: null
+  - baseline: null
+  - _self_
+
+seed: 1
+run_dir: results/${experiment_name}/${oc.env:RUN_ID,pending}
+experiment_name: smoke

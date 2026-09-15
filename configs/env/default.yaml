@@ -1,0 +1,22 @@
+sim_dt_min: ${data.sim_dt_min}
+control_dt_min: 15     # Vielfaches von sim_dt_min; Versatz zum PQ-Raster erlaubt
+voltage_criterion:
+  standard: EN50160
+  k95_band_pu: [0.90, 1.10]
+  k100_band_pu: [0.85, 1.10]
+  window_min: 10
+  evaluation_period: week
+sensor_config: full_state   # full_state | realistic
+episode:
+  length_days: 3
+  randomise_pq_budget: true  # Abschnitt 6.5
+  # gamma wird aus control_dt_min und Kriterienhorizont abgeleitet und
+  # validiert; kein freier Hyperparameter (Abschnitt 6.5).
+forecast:
+  mode: synthetic            # perfect | persistence | synthetic | model
+  horizon_steps: 8
+safety:
+  feasibility: none          # none | sensitivity | learned | exact | certified
+  mechanism: none            # none | mask | project | replace | certified_shield
+  coupling: store_executed
+  shadow_powerflow: eval_only
