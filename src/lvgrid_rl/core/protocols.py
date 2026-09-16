@@ -1,17 +1,16 @@
-"""Protokolle der austauschbaren Komponenten.
+"""Protocols of the interchangeable components.
 
-Hier stehen nur Schnittstellen, keine Implementierungen. Der Zweck ist, die
-Vertraege festzuschreiben, die der Erweiterbarkeits-Contract (§13 des
-Architekturdokuments) schuetzt -- insbesondere jene, deren Nachruestung teuer
-bis unmoeglich waere:
+This module contains interfaces only, no implementations. Its purpose is to fix
+the contracts that the extensibility contract (section 13 of the architecture
+document) protects -- in particular those whose retrofitting would be expensive
+to impossible:
 
-* :class:`FlexAsset` mit reiner Dynamikfunktion (I2) und physikalischen
-  Aktionsgrenzen (I4),
-* :class:`PowerFlowEngine` mit hypothetischem Aufruf (I5),
-* :class:`SafetyComponent` und :class:`SafetyCertifier` als Eingriffspunkte,
-  die ab M0 mit Null-Implementierung existieren (I7).
+* :class:`FlexAsset` with pure dynamics (I2) and physical action limits (I4),
+* :class:`PowerFlowEngine` with a hypothetical call (I5),
+* :class:`SafetyComponent` and :class:`SafetyCertifier` as intervention points
+  that exist from M0 with a null implementation (I7).
 
-Konkrete Implementierungen folgen ab M2.
+Concrete implementations follow from M2 onwards.
 """
 
 from __future__ import annotations
@@ -50,27 +49,27 @@ __all__ = [
 
 
 # ---------------------------------------------------------------------------
-# Aktionen und Setpoints
+# Actions and setpoints
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
 class ActionSpec:
-    """Aktionsraum einer Anlage, in **physikalischen** Einheiten.
+    """Action space of an asset, in **physical** units.
 
-    **Invariante I4.** Aktionen sind Leistungsgroessen, keine normierten
-    Anteile und keine Zielwerte. Semantiken wie "SoC-Zielwert" oder "Anteil der
-    Restenergie" erzeugen eine nicht boxfoermige zulaessige Menge in
-    Aktionskoordinaten, waehrend die zertifizierte Zulaessigkeitsmenge in
-    Einspeisungen formuliert ist. Die Normierung fuer den Agenten erfolgt im
-    ``ActionMapper`` und ist dort affin und invertierbar.
+    **Invariant I4.** Actions are power quantities, not normalised fractions and
+    not target values. Semantics such as "state-of-charge target" or "fraction
+    of remaining energy" produce a non-box feasible set in action coordinates,
+    whereas the certified feasible set is formulated in injections. Normalisation
+    for the agent happens in the ``ActionMapper`` and is affine and invertible
+    there.
 
     Args:
-        names: Sprechende Namen der Komponenten, z. B. ``("p_mw", "q_mvar")``.
-        bounds: Grenzen je Komponente.
-        discrete_levels: Bei diskretisierten Varianten die Anzahl Stufen je
-            Komponente, sonst ``None``. Wird fuer den Masking-Arm des
-            Safe-RL-Vergleichs (§6.8) benoetigt.
+        names: Descriptive names of the components, e.g. ``("p_mw", "q_mvar")``.
+        bounds: Limits per component.
+        discrete_levels: For discretised variants, the number of levels per
+            component; otherwise ``None``. Needed for the masking arm of the
+            safe-RL comparison (section 6.8).
     """
 
     names: tuple[str, ...]
@@ -79,27 +78,27 @@ class ActionSpec:
 
     def __post_init__(self) -> None:
         if len(self.names) != len(self.bounds):
-            raise ValueError("names und bounds muessen gleich lang sein")
+            raise ValueError("names and bounds must have equal length")
         if self.discrete_levels is not None and len(self.discrete_levels) != len(
             self.names
         ):
-            raise ValueError("discrete_levels muss zu names passen")
+            raise ValueError("discrete_levels must match names")
 
     @property
     def dim(self) -> int:
-        """Dimension des Aktionsraums dieser Anlage."""
+        """Dimension of this asset's action space."""
         return len(self.names)
 
 
 @dataclass(frozen=True, slots=True)
 class Setpoint:
-    """Ausgefuehrter Arbeitspunkt einer Anlage, Verbraucher-Zaehlpfeil.
+    """Executed operating point of an asset, consumer reference direction.
 
-    ``clipping_info`` ist nicht optional gedacht: **jede** Begrenzung, die eine
-    Anlage an der vorgeschlagenen Aktion vornimmt, wird hier gemeldet und
-    nicht still vorgenommen (Invariante I4). Nur so laesst sich spaeter
-    unterscheiden, ob eine Policy systematisch Unzulaessiges vorschlaegt oder
-    ob ein Sicherheitsmechanismus eingegriffen hat.
+    ``clipping_info`` is not meant to be optional: **every** limitation an asset
+    applies to the proposed action is reported here and not performed silently
+    (invariant I4). Only then can one later distinguish whether a policy
+    systematically proposes infeasible actions or whether a safety mechanism
+    intervened.
     """
 
     asset_id: str
@@ -113,17 +112,17 @@ class Setpoint:
 
     @property
     def was_clipped(self) -> bool:
-        """Wurde die vorgeschlagene Aktion begrenzt?"""
+        """Was the proposed action limited?"""
         return bool(self.clipping_info)
 
 
 @dataclass(frozen=True, slots=True)
 class AssetOutcome:
-    """Fuer Reward und KPI relevante Folgen eines Zeitschritts.
+    """Consequences of one time step that matter for reward and KPIs.
 
-    Die Groessen sind physikalisch und ungewichtet. Die Gewichtung passiert im
-    ``RewardComposer``; der Vergleich mit Referenzverfahren erfolgt auf diesen
-    Rohgroessen und nie auf dem Reward (§6.4).
+    The quantities are physical and unweighted. Weighting happens in the
+    ``RewardComposer``; the comparison against reference methods is made on
+    these raw quantities and never on the reward (section 6.4).
     """
 
     curtailed_energy_mwh: float = 0.0
@@ -134,19 +133,18 @@ class AssetOutcome:
 
 
 # ---------------------------------------------------------------------------
-# Anlagen
+# Assets
 # ---------------------------------------------------------------------------
 
 
 @runtime_checkable
 class FlexAsset(Protocol):
-    """Steuerbare Anlage am Netz.
+    """Controllable asset connected to the grid.
 
-    **Invariante I2:** :meth:`dynamics` ist eine reine Funktion. Gleiche
-    Eingabe liefert gleiche Ausgabe, und keine Eingabe wird veraendert. Ein
-    praediktiver Sicherheitsfilter muss Anlagenzustaende ueber einen Horizont
-    hypothetisch fortschreiben; mit zustandsmutierenden Methoden waere das nur
-    durch Neuschreiben aller Anlagenmodelle nachruestbar.
+    **Invariant I2:** :meth:`dynamics` is a pure function. The same input yields
+    the same output, and no input is mutated. A predictive safety filter has to
+    roll asset states forward hypothetically over a horizon; with state-mutating
+    methods that could only be retrofitted by rewriting every asset model.
     """
 
     asset_id: str
@@ -154,20 +152,20 @@ class FlexAsset(Protocol):
     ratings: AssetRatings
 
     def action_spec(self) -> ActionSpec:
-        """Aktionsraum in physikalischen Einheiten."""
+        """Action space in physical units."""
         ...
 
     def initial_state(self, rng: np.random.Generator) -> AssetState:
-        """Anfangszustand, gezogen mit dem uebergebenen Generator."""
+        """Initial state, drawn with the given generator."""
         ...
 
     def to_setpoint(
         self, s: AssetState, action: np.ndarray, info: InformationSet
     ) -> Setpoint:
-        """Aktion in einen Arbeitspunkt abbilden.
+        """Map an action onto an operating point.
 
-        Begrenzungen auf den physikalisch zulaessigen Bereich sind erlaubt,
-        muessen aber in ``Setpoint.clipping_info`` gemeldet werden.
+        Limiting to the physically feasible range is allowed but must be
+        reported in ``Setpoint.clipping_info``.
         """
         ...
 
@@ -178,48 +176,47 @@ class FlexAsset(Protocol):
         x: ExogenousInput,
         g: GridState,
     ) -> tuple[AssetState, AssetOutcome]:
-        """Zustandsfortschreibung als reine Funktion."""
+        """Advance the state as a pure function."""
         ...
 
 
 # ---------------------------------------------------------------------------
-# Netzphysik
+# Grid physics
 # ---------------------------------------------------------------------------
 
 
 @runtime_checkable
 class PowerFlowEngine(Protocol):
-    """Lastflussrechnung mit hypothetischem Aufruf.
+    """Power flow calculation with a hypothetical call.
 
-    **Invariante I5:** :meth:`run_hypothetical` darf den Zustand des laufenden
-    Netzes nicht veraendern. Rueckfalltrajektorien eines praediktiven
-    Sicherheitsfilters und die Falsifikationssuche der Verifikation brauchen
-    genau das.
+    **Invariant I5:** :meth:`run_hypothetical` must not alter the state of the
+    live grid. Backup trajectories of a predictive safety filter and the
+    falsification search of the verification step need exactly that.
     """
 
     def run(self, setpoints: Mapping[str, Setpoint], t_index: int) -> GridState:
-        """Lastfluss auf dem laufenden Netz rechnen und Zustand fortschreiben."""
+        """Run the power flow on the live grid and advance its state."""
         ...
 
     def run_hypothetical(
         self, setpoints: Mapping[str, Setpoint], t_index: int
     ) -> GridState:
-        """Lastfluss rechnen, ohne das laufende Netz zu veraendern."""
+        """Run the power flow without altering the live grid."""
         ...
 
 
 # ---------------------------------------------------------------------------
-# Sicherheit
+# Safety
 # ---------------------------------------------------------------------------
 
 
 class Verdict(Enum):
-    """Ergebnis einer Zulaessigkeitspruefung -- bewusst asymmetrisch.
+    """Result of a feasibility check -- deliberately asymmetric.
 
-    Es gibt kein ``UNSAFE``. ``NOT_CERTIFIED`` bedeutet "nicht beweisbar
-    zulaessig", und das genuegt, um den Rueckfall auszuloesen. Ein
-    Zertifizierer darf konservativ sein, aber nie optimistisch -- diese
-    Asymmetrie ist die Grundlage jeder spaeteren Garantieaussage (§6.9).
+    There is no ``UNSAFE``. ``NOT_CERTIFIED`` means "not provably feasible", and
+    that is sufficient to trigger the fallback. A certifier may be conservative
+    but never optimistic -- this asymmetry is the basis of any later guarantee
+    (section 6.9).
     """
 
     CERTIFIED_SAFE = "certified_safe"
@@ -228,16 +225,15 @@ class Verdict(Enum):
 
 @dataclass(frozen=True, slots=True)
 class UncertaintySet:
-    """Menge der moeglichen Realisierungen der nicht steuerbaren Einspeisungen.
+    """Set of possible realisations of the uncontrollable injections.
 
     Args:
-        series_ids: Namen der betroffenen Zeitreihen.
-        bounds_mw: Form ``(2, n)``, Unter- und Obergrenzen.
-        confidence: ``None`` bei deterministischen, aus Anlagen-Ratings
-            abgeleiteten Schranken -- dann gilt die Aussage ohne
-            Restwahrscheinlichkeit. Bei datengetriebenen Mengen die Konfidenz
-            ``1 - delta``, die dann in jeder Garantieaussage mitgenannt werden
-            muss (§6.9, Baustein 2).
+        series_ids: Names of the affected time series.
+        bounds_mw: Shape ``(2, n)``, lower and upper bounds.
+        confidence: ``None`` for deterministic bounds derived from asset
+            ratings -- the statement then holds without residual probability.
+            For data-driven sets, the confidence ``1 - delta``, which must then
+            be stated alongside every guarantee (section 6.9, building block 2).
     """
 
     series_ids: tuple[str, ...]
@@ -247,92 +243,92 @@ class UncertaintySet:
 
 @runtime_checkable
 class SafetyCertifier(Protocol):
-    """Prueft, ob eine Aktion nachweisbar zulaessig ist.
+    """Checks whether an action is provably feasible.
 
-    Implementierungen ab M7b: robuste konvexe Restriktion, alternativ
-    Linearisierung mit rigoroser Restgliedschranke. Reine Linearisierung ohne
-    Restgliedschranke erfuellt dieses Protokoll ausdruecklich **nicht** -- sie
-    gehoert in die heuristischen Mechanismen (§6.8).
+    Implementations from M7b onwards: robust convex restriction, alternatively
+    linearisation with a rigorous remainder bound. Plain linearisation without a
+    remainder bound explicitly does **not** satisfy this protocol -- it belongs
+    to the heuristic mechanisms (section 6.8).
     """
 
     def certify(
         self, state: SystemState, action: np.ndarray, uncertainty: UncertaintySet
     ) -> Verdict:
-        """Ist die Aktion fuer alle Realisierungen der Unsicherheitsmenge zulaessig?"""
+        """Is the action feasible for all realisations of the uncertainty set?"""
         ...
 
 
 @dataclass(frozen=True, slots=True)
 class InterventionInfo:
-    """Protokoll eines Sicherheitseingriffs, Grundlage der Safety-KPIs (§8.3)."""
+    """Record of a safety intervention, basis of the safety KPIs (section 8.3)."""
 
     intervened: bool
     magnitude: float = 0.0
-    """Norm der Aktionsaenderung, ``||a' - a||``."""
+    """Norm of the action change, ``||a' - a||``."""
     reason: str = ""
 
 
 @runtime_checkable
 class SafetyComponent(Protocol):
-    """Sicherheitseingriff *innerhalb* der Environment.
+    """Safety intervention *inside* the environment.
 
-    **Invariante I7.** Bewusst kein Gym-Wrapper: ein Wrapper sieht nur die
-    Beobachtung, ein Zertifizierer braucht den vollen ``SystemState``. Der
-    zweite Eingriffspunkt fuer Masking liegt dagegen ausserhalb der
-    Environment und wird ueber ``info["action_mask"]`` bereitgestellt.
+    **Invariant I7.** Deliberately not a Gym wrapper: a wrapper only sees the
+    observation, whereas a certifier needs the full ``SystemState``. The second
+    intervention point, for masking, lies outside the environment and is
+    provided via ``info["action_mask"]``.
     """
 
     def transform(
         self, action: np.ndarray, state: SystemState, info: InformationSet
     ) -> tuple[np.ndarray, InterventionInfo]:
-        """Aktion gegebenenfalls veraendern."""
+        """Alter the action if necessary."""
         ...
 
     def action_mask(self, state: SystemState, info: InformationSet) -> np.ndarray | None:
-        """Maske zulaessiger diskreter Aktionen, oder ``None``."""
+        """Mask of admissible discrete actions, or ``None``."""
         ...
 
 
 class NullSafetyComponent:
-    """Standardimplementierung: greift nicht ein, erlaubt alles.
+    """Default implementation: never intervenes, permits everything.
 
-    Existiert ab M0, damit der Eingriffspunkt von Anfang an im Ablauf liegt und
-    spaeter nur ausgetauscht, nicht eingebaut werden muss.
+    Exists from M0 so that the intervention point is part of the step sequence
+    from the start and later only has to be swapped in, not built in.
     """
 
     def transform(
         self, action: np.ndarray, state: SystemState, info: InformationSet
     ) -> tuple[np.ndarray, InterventionInfo]:
-        """Gibt die Aktion unveraendert zurueck."""
+        """Return the action unchanged."""
         return action, InterventionInfo(intervened=False)
 
     def action_mask(self, state: SystemState, info: InformationSet) -> np.ndarray | None:
-        """Erlaubt alle Aktionen."""
+        """Permit all actions."""
         return None
 
 
 # ---------------------------------------------------------------------------
-# Regler
+# Controllers
 # ---------------------------------------------------------------------------
 
 
 @runtime_checkable
 class Controller(Protocol):
-    """Gemeinsame Schnittstelle von RL-Policies und Referenzverfahren.
+    """Common interface of RL policies and reference methods.
 
-    Der Evaluationspfad kennt nur dieses Protokoll. Dadurch laufen
-    regelbasierte Verfahren, OPF, MPC und trainierte Policies durch exakt
-    dieselbe Auswertung, was den Vergleich strukturell fair macht (§7.1).
+    The evaluation path knows only this protocol. Rule-based methods, OPF, MPC
+    and trained policies therefore run through exactly the same evaluation,
+    which makes the comparison structurally fair (section 7.1).
 
-    Verfahren, die mehr als das ``InformationSet`` brauchen -- etwa
-    ``mpc_oracle`` mit perfekter Vorausschau --, erhalten diesen privilegierten
-    Zugriff explizit und werden im Ergebnisbericht entsprechend gekennzeichnet.
+    Methods that need more than the ``InformationSet`` -- such as ``mpc_oracle``
+    with perfect foresight -- receive that privileged access explicitly and are
+    flagged accordingly in the results report.
     """
 
     def reset(self, info: InformationSet) -> None:
-        """Internen Zustand zu Episodenbeginn zuruecksetzen."""
+        """Reset internal state at the start of an episode."""
         ...
 
     def act(self, info: InformationSet) -> np.ndarray:
-        """Aktion fuer den aktuellen Entscheidungszeitpunkt."""
+        """Action for the current decision point."""
         ...

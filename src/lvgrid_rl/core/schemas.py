@@ -1,27 +1,25 @@
-"""Kernschemata der Simulation: Zustand, exogene Eingaenge, Betriebsmittel-Ratings.
+"""Core schemas of the simulation: state, exogenous inputs, asset ratings.
 
-Diese Datentypen sind die Schnittstelle, auf die sich alle spaeteren Schichten
-stuetzen. Sie werden in M0 zuerst festgelegt, weil jede Komponente, die vorher
-entsteht, sich hinterher nach ihnen richten muesste.
+These types are the interface every later layer builds on. They are fixed first
+in M0 because any component created before them would afterwards have to be
+bent to fit.
 
-Drei Gestaltungsentscheidungen, jeweils mit Begruendung aus dem
-Erweiterbarkeits-Contract (§13 des Architekturdokuments):
+Three design decisions, each justified by the extensibility contract
+(section 13 of the architecture document):
 
-* **Alles unveraenderlich** (``frozen=True``). Aenderungen erfolgen ueber
-  :func:`dataclasses.replace`. Damit ist die Anlagendynamik zwangslaeufig eine
-  reine Funktion (Invariante I2), und hypothetisches Vorausrechnen fuer einen
-  spaeteren praediktiven Sicherheitsfilter ist ohne Umbau moeglich.
-* **numpy-Arrays werden schreibgeschuetzt.** ``frozen=True`` schuetzt nur die
-  Referenz, nicht den Inhalt. :func:`freeze_array` setzt daher
-  ``flags.writeable = False``. Ohne das ist die Unveraenderlichkeit eine
-  Behauptung, kein Fakt.
-* **Exogene Eingaenge tragen Schranken, nicht nur Werte** (Invariante I6).
-  ``bounds`` wird in M1 trivial aus den Anlagen-Ratings befuellt und zunaechst
-  von nichts benutzt. Die Verrohrung existiert dann aber, und das ist der
-  Zweck: Unsicherheitsmengen spaeter nachzuruesten waere ein Eingriff in jeden
-  Datenpfad.
+* **Everything immutable** (``frozen=True``). Changes go through
+  :func:`dataclasses.replace`. Asset dynamics are therefore necessarily pure
+  functions (invariant I2), and hypothetical roll-outs for a later predictive
+  safety filter work without rework.
+* **numpy arrays are made read-only.** ``frozen=True`` protects the reference,
+  not the contents. :func:`freeze_array` therefore sets ``flags.writeable =
+  False``. Without it, immutability is a claim rather than a fact.
+* **Exogenous inputs carry bounds, not just values** (invariant I6). In M1
+  ``bounds`` is filled trivially from the asset ratings and used by nothing.
+  The plumbing exists, though, and that is the point: retrofitting uncertainty
+  sets later would mean touching every data path.
 
-Einheiten und Vorzeichen: siehe :mod:`lvgrid_rl.core.units`.
+For units and signs see :mod:`lvgrid_rl.core.units`.
 """
 
 from __future__ import annotations
@@ -47,11 +45,11 @@ __all__ = [
 
 
 def freeze_array(a: np.ndarray) -> np.ndarray:
-    """Gibt eine schreibgeschuetzte Sicht auf ``a`` zurueck.
+    """Return a read-only view of ``a``.
 
-    Es wird bewusst *nicht* kopiert: die Schemata sind heiss im Trainingspfad,
-    und eine Kopie je Zeitschritt waere spuerbar. Der Aufrufer gibt mit dem
-    Aufruf die Eigentuemerschaft am Array ab.
+    Deliberately not a copy: the schemas sit on the hot training path and a copy
+    per time step would be noticeable. By calling this, the caller gives up
+    ownership of the array.
 
     >>> arr = freeze_array(np.array([1.0, 2.0]))
     >>> arr.flags.writeable
@@ -63,16 +61,16 @@ def freeze_array(a: np.ndarray) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# Unsicherheit und Betriebsmittelgrenzen
+# Uncertainty and equipment limits
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
 class Interval:
-    """Geschlossenes Intervall ``[lo, hi]``.
+    """Closed interval ``[lo, hi]``.
 
-    Traegt absichtlich keine Einheit im Feldnamen: die Einheit ergibt sich aus
-    dem Feld, in dem das Intervall verwendet wird (z. B. ``p_bounds_mw``).
+    Deliberately carries no unit in its field names: the unit follows from the
+    field the interval is used in (for example ``p_bounds_mw``).
     """
 
     lo: float
@@ -80,70 +78,70 @@ class Interval:
 
     def __post_init__(self) -> None:
         if not self.lo <= self.hi:
-            raise ValueError(f"Leeres Intervall: lo={self.lo} > hi={self.hi}")
+            raise ValueError(f"Empty interval: lo={self.lo} > hi={self.hi}")
 
     def contains(self, x: float, tol: float = 1e-9) -> bool:
-        """Liegt ``x`` im Intervall, mit Toleranz gegen Gleitkommarauschen?"""
+        """Is ``x`` inside the interval, allowing for floating point noise?"""
         return self.lo - tol <= x <= self.hi + tol
 
     @property
     def width(self) -> float:
-        """Breite des Intervalls."""
+        """Width of the interval."""
         return self.hi - self.lo
 
 
 @dataclass(frozen=True, slots=True)
 class AssetRatings:
-    """Physikalische Grenzen einer Anlage am Netzanschlusspunkt.
+    """Physical limits of an asset at its grid connection point.
 
-    Grundlage der *deterministischen* Unsicherheitsmengen (§6.9, P2 des
-    Architekturdokuments). Diese Werte jetzt mitzuschreiben kostet nichts; sie
-    spaeter fuer alle Szenarien nachzutragen ist Handarbeit am Netzdatensatz.
+    Basis of the *deterministic* uncertainty sets (section 6.9, P2, of the
+    architecture document). Recording these values now costs nothing; adding
+    them later for all scenarios is manual work on the grid dataset.
 
-    Vorzeichen nach Verbraucher-Zaehlpfeil: fuer eine PV-Anlage ist
-    ``p_min_mw`` negativ (volle Einspeisung) und ``p_max_mw == 0.0``.
+    Signs follow the consumer reference direction: for a PV system ``p_min_mw``
+    is negative (full infeed) and ``p_max_mw == 0.0``.
     """
 
     p_min_mw: float
     p_max_mw: float
     s_max_mva: float | None = None
-    """Scheinleistungsgrenze des Wechselrichters, falls Q-Faehigkeit besteht."""
+    """Inverter apparent power limit, where reactive power capability exists."""
     fuse_rating_a: float | None = None
-    """Nennstrom der Hausanschlusssicherung, falls bekannt."""
+    """Rated current of the house connection fuse, if known."""
     contracted_p_mw: float | None = None
-    """Vereinbarte Anschlussleistung, falls bekannt."""
+    """Contracted connection capacity, if known."""
 
     def __post_init__(self) -> None:
         if not self.p_min_mw <= self.p_max_mw:
             raise ValueError(f"p_min_mw={self.p_min_mw} > p_max_mw={self.p_max_mw}")
         if self.s_max_mva is not None and self.s_max_mva < 0.0:
-            raise ValueError("s_max_mva darf nicht negativ sein")
+            raise ValueError("s_max_mva must not be negative")
 
     @property
     def p_bounds(self) -> Interval:
-        """Leistungsgrenzen als Intervall, fuer Unsicherheitsmengen."""
+        """Power limits as an interval, for uncertainty sets."""
         return Interval(self.p_min_mw, self.p_max_mw)
 
 
 @dataclass(frozen=True, slots=True)
 class ExogenousInput:
-    """Nicht steuerbare Eingangsgroessen zu einem Zeitschritt.
+    """Uncontrollable input quantities for one time step.
 
-    Enthaelt sowohl die realisierten Werte (fuer die Simulation) als **auch**
-    Schranken (fuer eine spaetere robuste Zulaessigkeitspruefung). Invariante I6
-    verlangt, dass kein Datenpfad eine Instanz ohne ``bounds`` erzeugt; daher
-    ist das Feld nicht optional.
+    Holds the realised values (for the simulation) **and** bounds (for a later
+    robust feasibility check). Invariant I6 requires that no data path can
+    construct an instance without ``bounds``, which is why the field is not
+    optional.
 
     Args:
-        t_index: Zeitschrittindex relativ zum Szenariofenster.
-        series_ids: Namen der Zeitreihen, in derselben Reihenfolge wie
+        t_index: Time step index relative to the scenario window.
+        series_ids: Names of the time series, in the same order as
             ``realized_mw``.
-        realized_mw: Realisierte Wirkleistungen, Verbraucher-Zaehlpfeil.
-        bounds_mw: Array der Form ``(2, n)`` mit Unter- und Obergrenzen. In M1
-            trivial aus :class:`AssetRatings` befuellt.
-        ambient_temp_degc: Aussenlufttemperatur, Eingang des thermischen
-            Modells und der COP-Kennlinie.
-        ghi_wm2: Globalstrahlung, Eingang der PV-Potenzialrechnung.
+        realized_mw: Realised active power, consumer reference direction.
+        bounds_mw: Array of shape ``(2, n)`` with lower and upper bounds. In M1
+            filled trivially from :class:`AssetRatings`.
+        ambient_temp_degc: Ambient air temperature, input to the thermal model
+            and the COP characteristic.
+        ghi_wm2: Global horizontal irradiance, input to the PV potential model.
     """
 
     t_index: int
@@ -157,53 +155,53 @@ class ExogenousInput:
         n = len(self.series_ids)
         if self.realized_mw.shape != (n,):
             raise ValueError(
-                f"realized_mw hat Form {self.realized_mw.shape}, erwartet ({n},)"
+                f"realized_mw has shape {self.realized_mw.shape}, expected ({n},)"
             )
         if self.bounds_mw.shape != (2, n):
             raise ValueError(
-                f"bounds_mw hat Form {self.bounds_mw.shape}, erwartet (2, {n}). "
-                "Invariante I6: exogene Eingaenge muessen Schranken tragen."
+                f"bounds_mw has shape {self.bounds_mw.shape}, expected (2, {n}). "
+                "Invariant I6: exogenous inputs must carry bounds."
             )
         lo, hi = self.bounds_mw
         if np.any(lo > hi):
-            raise ValueError("bounds_mw: Untergrenze ueber Obergrenze")
-        # Der realisierte Wert muss in den Schranken liegen, sonst ist die
-        # Unsicherheitsmenge falsch parametriert und jede spaetere
-        # Sicherheitsaussage auf ihrer Basis waere ungueltig.
+            raise ValueError("bounds_mw: lower bound above upper bound")
+        # The realised value must lie inside the bounds; otherwise the
+        # uncertainty set is parameterised incorrectly and any later safety
+        # statement resting on it would be void.
         tol = 1e-9
         outside = (self.realized_mw < lo - tol) | (self.realized_mw > hi + tol)
         if np.any(outside):
             bad = [self.series_ids[i] for i in np.flatnonzero(outside)]
-            raise ValueError(f"Realisierung liegt ausserhalb der Schranken fuer: {bad}")
+            raise ValueError(f"Realisation lies outside the bounds for: {bad}")
         object.__setattr__(self, "realized_mw", freeze_array(self.realized_mw))
         object.__setattr__(self, "bounds_mw", freeze_array(self.bounds_mw))
 
     def bound_of(self, series_id: str) -> Interval:
-        """Schranken einer einzelnen Zeitreihe."""
+        """Bounds of a single time series."""
         i = self.series_ids.index(series_id)
         return Interval(float(self.bounds_mw[0, i]), float(self.bounds_mw[1, i]))
 
 
 # ---------------------------------------------------------------------------
-# Netzzustand
+# Grid state
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
 class GridState:
-    """Ergebnis einer Lastflussrechnung, reduziert auf das Notwendige.
+    """Result of a power flow calculation, reduced to what is needed.
 
-    Bewusst keine pandas-Objekte: dieser Typ wird pro Simulationsschritt
-    erzeugt, und DataFrames sind dafuer zu teuer.
+    Deliberately no pandas objects: this type is created once per simulation
+    step, and DataFrames are too expensive for that.
 
-    ``converged=False`` ist ein gueltiger Zustand und kein Fehler. Die
-    Environment behandelt Nichtkonvergenz als definiertes Ereignis
-    (Reward-Strafe plus ``info``-Flag), nicht als Ausnahme.
+    ``converged=False`` is a valid state, not an error. The environment treats
+    non-convergence as a defined event (reward penalty plus ``info`` flag), not
+    as an exception.
     """
 
     t_index: int
     vm_pu: np.ndarray
-    """Spannungsbetrag je Bus, Indizierung wie im pandapower-Netz."""
+    """Voltage magnitude per bus, indexed as in the pandapower grid."""
     line_loading_percent: np.ndarray
     trafo_loading_percent: np.ndarray
     p_slack_mw: float
@@ -216,17 +214,17 @@ class GridState:
 
 
 # ---------------------------------------------------------------------------
-# EN-50160-Zustand
+# EN 50160 state
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
 class PQWindowState:
-    """Laufendes 10-Minuten-Mittelungsfenster eines bewerteten Busses.
+    """Running 10-minute averaging window of an evaluated bus.
 
-    EN 50160 bewertet 10-min-Mittelwerte, nicht Momentanwerte. Dieser Zustand
-    haelt die Teilsumme des offenen Fensters; erst am Fensterende entsteht ein
-    kriterienrelevanter Wert.
+    EN 50160 assesses 10-minute mean values, not instantaneous values. This
+    state holds the partial sum of the open window; a criterion-relevant value
+    only appears at the end of a window.
     """
 
     samples_count: int
@@ -234,7 +232,7 @@ class PQWindowState:
 
     @property
     def mean_pu(self) -> float:
-        """Mittelwert des bisher gefuellten Fensteranteils."""
+        """Mean over the part of the window filled so far."""
         if self.samples_count == 0:
             return float("nan")
         return self.partial_sum_pu / self.samples_count
@@ -242,29 +240,29 @@ class PQWindowState:
 
 @dataclass(frozen=True, slots=True)
 class PQBudgetState:
-    """Verbrauchtes Verletzungsbudget des laufenden Wochenintervalls.
+    """Consumed violation budget of the running weekly interval.
 
-    EN 50160 erlaubt, dass 5 % der 10-min-Mittelwerte einer Woche ausserhalb
-    ±10 % U_n liegen; bei 1008 Fenstern je Woche sind das 50 Fenster je Bus.
-    Ohne diesen Zustand in der Beobachtung ist das Regelproblem nicht
-    Markov'sch (§6.6 des Architekturdokuments), weshalb er Teil des
-    Systemzustands ist und nicht nur eine Auswertungsgroesse.
+    EN 50160 permits 5 % of the 10-minute mean values of a week to lie outside
+    +/-10 % U_n; with 1008 windows per week that is 50 windows per bus. Without
+    this state in the observation the control problem is not Markovian
+    (section 6.6 of the architecture document), which is why it is part of the
+    system state and not merely an evaluation quantity.
     """
 
     windows_elapsed_count: int
-    """Abgeschlossene 10-min-Fenster seit Wochenbeginn."""
+    """Completed 10-minute windows since the start of the week."""
     windows_total_count: int = 1008
-    """Fenster je Wochenintervall: 7 * 24 * 6."""
+    """Windows per weekly interval: 7 * 24 * 6."""
     violations_k95_count: np.ndarray = field(
         default_factory=lambda: np.zeros(0, dtype=np.int32)
     )
-    """Je bewerteter Bus: Anzahl Fenster ausserhalb ±10 % U_n."""
+    """Per evaluated bus: number of windows outside +/-10 % U_n."""
     violations_k100_count: np.ndarray = field(
         default_factory=lambda: np.zeros(0, dtype=np.int32)
     )
-    """Je bewerteter Bus: Anzahl Fenster ausserhalb +10 % / -15 % U_n."""
+    """Per evaluated bus: number of windows outside +10 % / -15 % U_n."""
     windows: tuple[PQWindowState, ...] = ()
-    """Offene Mittelungsfenster, je bewerteter Bus."""
+    """Open averaging windows, per evaluated bus."""
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -276,32 +274,31 @@ class PQBudgetState:
 
     @property
     def budget_windows_count(self) -> int:
-        """Zulaessige Anzahl verletzender Fenster je Bus und Woche (K95)."""
+        """Permitted number of violating windows per bus and week (K95)."""
         return int(0.05 * self.windows_total_count)
 
     def budget_used_frac(self) -> np.ndarray:
-        """Anteil des verbrauchten K95-Budgets je Bus, kann > 1 werden."""
+        """Fraction of the K95 budget consumed per bus; may exceed 1."""
         return self.violations_k95_count / max(self.budget_windows_count, 1)
 
     def windows_remaining_count(self) -> int:
-        """Verbleibende 10-min-Fenster im laufenden Wochenintervall."""
+        """Remaining 10-minute windows in the running weekly interval."""
         return max(self.windows_total_count - self.windows_elapsed_count, 0)
 
 
 # ---------------------------------------------------------------------------
-# Anlagenzustand und Gesamtzustand
+# Asset state and overall state
 # ---------------------------------------------------------------------------
 
 
 @runtime_checkable
 class AssetState(Protocol):
-    """Marker-Protokoll fuer Anlagenzustaende.
+    """Marker protocol for asset states.
 
-    Konkrete Implementierungen entstehen in M4 (``lvgrid_rl.components``) und
-    muessen unveraenderliche, kopierbare Wertobjekte sein -- Invariante I2. Ein
-    Zustand mit Methoden, die ``self`` veraendern, macht den spaeteren
-    praediktiven Sicherheitsfilter unmoeglich, weil dieser Anlagenzustaende
-    hypothetisch ueber einen Horizont fortschreiben muss.
+    Concrete implementations arrive in M4 (``lvgrid_rl.components``) and must be
+    immutable, copyable value objects -- invariant I2. A state with methods that
+    mutate ``self`` makes the later predictive safety filter impossible, because
+    it has to roll asset states forward hypothetically over a horizon.
     """
 
     asset_id: str
@@ -309,25 +306,24 @@ class AssetState(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class SystemState:
-    """Vollstaendiger Systemzustand zu einem Zeitpunkt.
+    """Complete system state at one point in time.
 
-    **Invariante I1:** Dieser Typ ist die einzige Quelle der Wahrheit. Die
-    Beobachtung des Agenten (ab M3) ist eine *Projektion* hiervon und niemals
-    selbst Zustandstraeger. Nur so kann ein spaeterer Zertifizierer mehr
-    Information erhalten als der Agent -- er ist eine separate, besser
-    instrumentierte Komponente (§6.9).
+    **Invariant I1:** this type is the single source of truth. The agent's
+    observation (from M3) is a *projection* of it and never itself a carrier of
+    state. Only then can a later certifier receive more information than the
+    agent -- it is a separate, better instrumented component (section 6.9).
 
-    ``exogenous`` enthaelt die realisierten Werte *bei* ``t_index``. Was zum
-    Entscheidungszeitpunkt bekannt sein darf, regelt
-    :class:`lvgrid_rl.core.information.InformationSet`; dieser Typ hier ist der
-    Vollzustand fuer Simulation, Zertifizierung und Auswertung.
+    ``exogenous`` holds the realised values *at* ``t_index``. What may be known
+    at decision time is governed by
+    :class:`lvgrid_rl.core.information.InformationSet`; this type is the full
+    state for simulation, certification and evaluation.
     """
 
     t_index: int
     timestamp: datetime
-    """Zeitstempel in UTC. Kalenderfeatures werden daraus abgeleitet."""
+    """Timestamp in UTC. Calendar features are derived from it."""
     topology_id: str
-    """Kennung der Schalttopologie. Eine Sicherheitsaussage gilt je Topologie."""
+    """Identifier of the switching topology. A safety statement holds per topology."""
     grid: GridState
     assets: Mapping[str, AssetState]
     exogenous: ExogenousInput
@@ -336,6 +332,6 @@ class SystemState:
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None:
             raise ValueError(
-                "timestamp muss zeitzonenbehaftet sein (UTC). Naive Zeitstempel "
-                "erzeugen bei Sommerzeitwechseln stille Fehler."
+                "timestamp must be timezone-aware (UTC). Naive timestamps cause "
+                "silent errors at daylight saving transitions."
             )

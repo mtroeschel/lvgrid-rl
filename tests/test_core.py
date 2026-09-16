@@ -188,7 +188,7 @@ def test_exogenous_input_rejects_realisation_outside_bounds() -> None:
 
     Sie wuerden jede spaetere Sicherheitsaussage auf ihrer Basis entwerten.
     """
-    with pytest.raises(ValueError, match="ausserhalb der Schranken"):
+    with pytest.raises(ValueError, match="outside the bounds"):
         ExogenousInput(
             t_index=0,
             series_ids=("a",),

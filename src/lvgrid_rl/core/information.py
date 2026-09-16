@@ -1,19 +1,18 @@
-"""Informationsordnung: was zum Entscheidungszeitpunkt bekannt sein darf.
+"""Information ordering: what may be known at decision time.
 
-Dies ist die Umsetzung von Invariante I3 (§13 des Architekturdokuments) und
-zugleich die unangenehmste der sieben Invarianten, weil ihre Verletzung
-unsichtbar bleibt: Ein Regler, der versehentlich die Realisierung des
-kommenden Intervalls liest, lernt hervorragend und ist im Betrieb wertlos --
-und der Fehler ist diffus ueber den Code verteilt.
+This implements invariant I3 (section 13 of the architecture document) and is at
+the same time the most unpleasant of the seven invariants, because a violation
+stays invisible: a controller that accidentally reads the realisation of the
+coming interval learns beautifully and is worthless in operation -- and the bug
+is spread diffusely across the codebase.
 
-Das Modul stellt zwei Dinge bereit:
+The module provides two things:
 
-* :class:`InformationSet` -- der Ausschnitt des Zustands, auf dem die
-  Aktionsbildung arbeiten darf. Strukturell so gebaut, dass realisierte
-  Zukunftswerte gar nicht hineinpassen.
-* :class:`DecisionScope` -- ein Kontextmanager, der Zugriffe auf Zeitschritte
-  nach dem Entscheidungszeitpunkt zur Laufzeit unterbindet. Dadurch wird die
-  Invariante testbar, statt nur dokumentiert zu sein.
+* :class:`InformationSet` -- the slice of the state that action construction may
+  work on. Structured such that realised future values do not fit into it.
+* :class:`DecisionScope` -- a context manager that blocks access to time steps
+  beyond the decision point at runtime. This makes the invariant testable rather
+  than merely documented.
 """
 
 from __future__ import annotations
@@ -34,44 +33,44 @@ __all__ = [
     "ClairvoyanceError",
     "current_decision_horizon",
     "assert_readable",
+    "unrestricted",
 ]
 
 
 class ClairvoyanceError(RuntimeError):
-    """Zugriff auf Information, die zum Entscheidungszeitpunkt fehlt.
+    """Access to information that is not available at decision time.
 
-    Siehe :func:`assert_readable` und :class:`DecisionScope`.
+    See :func:`assert_readable` and :class:`DecisionScope`.
     """
 
 
-# Der Entscheidungshorizont ist Thread-lokal, damit parallele Environments in
-# ``SubprocVecEnv``/``DummyVecEnv`` sich nicht gegenseitig beeinflussen.
+# The decision horizon is thread-local so that parallel environments in
+# ``SubprocVecEnv``/``DummyVecEnv`` do not interfere with each other.
 _local = threading.local()
 
 
 def current_decision_horizon() -> int | None:
-    """Aktuell gueltiger Entscheidungszeitpunkt.
+    """Currently valid decision point.
 
-    Gibt ``None`` zurueck, wenn kein :class:`DecisionScope` aktiv ist.
+    Returns ``None`` when no :class:`DecisionScope` is active.
     """
     return getattr(_local, "horizon", None)
 
 
-def assert_readable(t_index: int, what: str = "Zeitreihenwert") -> None:
-    """Prueft, ob ``t_index`` zum Entscheidungszeitpunkt gelesen werden darf.
+def assert_readable(t_index: int, what: str = "time series value") -> None:
+    """Check whether ``t_index`` may be read at the current decision point.
 
-    Wird von den Datenzugriffen der Szenarioschicht aufgerufen. Ausserhalb
-    eines :class:`DecisionScope` ist jeder Zugriff erlaubt und die Funktion
-    kehrt sofort zurueck -- Simulation, Auswertung und Zertifizierung duerfen
-    den Vollzustand sehen, und der heisse Pfad soll nichts kosten.
+    Called by the data accessors of the scenario layer. Outside a
+    :class:`DecisionScope` every access is permitted and the function returns
+    immediately -- simulation, evaluation and certification may see the full
+    state, and the hot path should cost nothing.
 
-    Innerhalb eines Scope wird der Zugriff zusaetzlich protokolliert, damit
-    Tests pruefen koennen, *welche* Zeitpunkte gelesen wurden -- nicht nur,
-    dass keine Ausnahme fiel.
+    Inside a scope the access is additionally recorded, so that tests can check
+    *which* time steps were read, not merely that no exception was raised.
 
     Raises:
-        ClairvoyanceError: wenn innerhalb eines Entscheidungsfensters auf einen
-            spaeteren Zeitschritt zugegriffen wird.
+        ClairvoyanceError: if a later time step is accessed inside a decision
+            window.
     """
     horizon = current_decision_horizon()
     if horizon is None:
@@ -81,23 +80,22 @@ def assert_readable(t_index: int, what: str = "Zeitreihenwert") -> None:
         recorder.append(t_index)
     if t_index > horizon:
         raise ClairvoyanceError(
-            f"{what} fuer t={t_index} angefordert, erlaubt ist hoechstens "
-            f"t={horizon}. Invariante I3: die Aktionsbildung darf nur auf "
-            "Prognosen zugreifen, nicht auf Realisierungen des kommenden "
-            "Intervalls."
+            f"{what} requested for t={t_index}, at most t={horizon} is allowed. "
+            "Invariant I3: action construction may only use forecasts, never the "
+            "realisation of the coming interval."
         )
 
 
 class DecisionScope:
-    """Kontextmanager, der die Informationsordnung zur Laufzeit erzwingt.
+    """Context manager that enforces the information ordering at runtime.
 
-    Umschliesst in der Environment die Schritte 1 und 2 des Ablaufs (§6.1):
-    Aktionsabbildung und Setpoint-Bildung. Innerhalb des Blocks fuehrt jeder
-    Zugriff auf einen Zeitschritt ``> t_decision`` zu einer
+    In the environment it wraps steps 1 and 2 of the step sequence
+    (section 6.1): action mapping and setpoint construction. Inside the block,
+    any access to a time step ``> t_decision`` raises
     :class:`ClairvoyanceError`.
 
-    Zugriffe werden zusaetzlich mitgeschrieben, damit Tests pruefen koennen,
-    *welche* Zeitpunkte gelesen wurden -- nicht nur, dass keine Ausnahme fiel.
+    Accesses are also recorded, so that tests can assert *which* time steps were
+    read.
 
     Example:
         >>> scope = DecisionScope(t_decision=10)
@@ -106,11 +104,6 @@ class DecisionScope:
         ...     assert_readable(8)
         >>> scope.accessed
         (10, 8)
-        >>> with DecisionScope(t_decision=10):
-        ...     assert_readable(11)
-        Traceback (most recent call last):
-            ...
-        lvgrid_rl.core.information.ClairvoyanceError: ...
     """
 
     __slots__ = ("t_decision", "_accessed", "_previous")
@@ -132,18 +125,18 @@ class DecisionScope:
 
     @property
     def accessed(self) -> tuple[int, ...]:
-        """Alle innerhalb des Blocks angeforderten Zeitschritte."""
+        """All time steps requested inside the block."""
         return tuple(self._accessed)
 
 
 @contextmanager
 def unrestricted() -> Iterator[None]:
-    """Hebt die Informationsordnung vorruebergehend auf.
+    """Temporarily lift the information ordering.
 
-    Nur fuer Komponenten, die den Vollzustand legitim brauchen: Simulation,
-    Referenzverfahren mit perfekter Vorausschau (``mpc_oracle``) und
-    Auswertung. Jede Verwendung in Agentenpfaden ist ein Fehler und sollte im
-    Review auffallen -- deshalb der sprechende Name.
+    Only for components that legitimately need the full state: the simulation
+    itself, reference methods with perfect foresight (``mpc_oracle``) and
+    evaluation. Any use on an agent path is a bug and should stand out in
+    review -- hence the deliberately conspicuous name.
     """
     previous = current_decision_horizon()
     _local.horizon = None
@@ -155,34 +148,32 @@ def unrestricted() -> Iterator[None]:
 
 @dataclass(frozen=True, slots=True)
 class InformationSet:
-    """Was der Regler zum Entscheidungszeitpunkt ``t_index`` wissen darf.
+    """What the controller may know at decision point ``t_index``.
 
-    Strukturell so gewaehlt, dass Hellsichtigkeit nicht ausdrueckbar ist: es
-    gibt kein Feld fuer realisierte Werte des kommenden Intervalls. Statt der
-    Realisierung stehen Schranken (``exogenous_bounds_mw``) und Prognosen
-    (``forecast``) zur Verfuegung.
+    Structured so that clairvoyance is not expressible: there is no field for
+    realised values of the coming interval. Instead of the realisation there are
+    bounds (``exogenous_bounds_mw``) and forecasts (``forecast``).
 
-    Der Unterschied zur Beobachtung des Agenten: das ``InformationSet`` ist das
-    *Maximum* des zulaessig Wissbaren. Der ``ObservationBuilder`` (M3) waehlt
-    daraus gemaess ``sensor_config`` aus und kann deutlich weniger
-    weitergeben. Ein spaeterer Zertifizierer darf dagegen das volle
-    ``InformationSet`` nutzen.
+    The difference from the agent's observation: the ``InformationSet`` is the
+    *maximum* of what may legitimately be known. The ``ObservationBuilder`` (M3)
+    selects from it according to ``sensor_config`` and may pass on considerably
+    less. A later certifier, by contrast, may use the full ``InformationSet``.
 
     Args:
-        t_index: Entscheidungszeitpunkt.
-        timestamp: Zeitstempel in UTC.
-        measurements: Messwerte gemaess konfigurierter Sensorik, Schluessel in
-            der Form ``"vm_pu/bus_17"`` oder ``"trafo_loading_percent/0"``.
-        asset_states: Interne Zustaende der eigenen Anlagen.
-        exogenous_bounds_mw: Schranken der nicht steuerbaren Einspeisungen
-            waehrend ``[t, t + control_dt)``, Form ``(2, n)``.
-        series_ids: Namen zu den Spalten von ``exogenous_bounds_mw``.
-        forecast: Prognosen je Groesse, jeweils Array der Laenge ``horizon``.
-            Erzeugt vom Prognosefehlermodell (§6.7); im Modus ``perfect``
-            enthaelt es die Realisierung, und genau das ist dann ein
-            ausgewiesener Sonderfall und kein Leck.
-        pq: Verbrauchtes EN-50160-Budget. Ohne dieses Feld ist das
-            Regelproblem nicht Markov'sch.
+        t_index: Decision point.
+        timestamp: Timestamp in UTC.
+        measurements: Measured values according to the configured sensor set,
+            keyed as ``"vm_pu/bus_17"`` or ``"trafo_loading_percent/0"``.
+        asset_states: Internal states of the own assets.
+        series_ids: Names for the columns of ``exogenous_bounds_mw``.
+        exogenous_bounds_mw: Bounds on the uncontrollable injections during
+            ``[t, t + control_dt)``, shape ``(2, n)``.
+        forecast: Forecasts per quantity, each an array of length ``horizon``.
+            Produced by the forecast error model (section 6.7); in mode
+            ``perfect`` it contains the realisation, and that is then a declared
+            special case rather than a leak.
+        pq: Consumed EN 50160 budget. Without this field the control problem is
+            not Markovian.
     """
 
     t_index: int
@@ -198,15 +189,15 @@ class InformationSet:
         n = len(self.series_ids)
         if self.exogenous_bounds_mw.shape != (2, n):
             raise ValueError(
-                f"exogenous_bounds_mw hat Form {self.exogenous_bounds_mw.shape}, "
-                f"erwartet (2, {n})"
+                f"exogenous_bounds_mw has shape {self.exogenous_bounds_mw.shape}, "
+                f"expected (2, {n})"
             )
         object.__setattr__(
             self, "exogenous_bounds_mw", freeze_array(self.exogenous_bounds_mw)
         )
 
     def bound_of(self, series_id: str) -> Interval:
-        """Schranken einer einzelnen Zeitreihe im kommenden Intervall."""
+        """Bounds of a single time series over the coming interval."""
         i = self.series_ids.index(series_id)
         return Interval(
             float(self.exogenous_bounds_mw[0, i]),

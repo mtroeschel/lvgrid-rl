@@ -1,24 +1,22 @@
-"""Einheiten- und Vorzeichenkanon des Projekts.
+"""Unit and sign conventions of the project.
 
-Dieses Modul enthaelt keine Logik, sondern eine Festlegung. Es ist bewusst das
-erste Modul des Projekts, weil zwei Klassen von Fehlern, die hier entstehen,
-spaeter extrem teuer sind:
+This module contains no logic, only a commitment. It is deliberately the first
+module of the project, because two classes of mistake that originate here are
+extremely expensive later:
 
-1. **Gemischte Einheiten.** pandapower arbeitet mit MW/MVar fuer Leistungen,
-   aber p.u. fuer Spannungen. Wer intern zusaetzlich kW oder Volt einfuehrt,
-   erzeugt versteckte Konversionen. Fuer die spaetere Zertifizierung (§6.9 der
-   Architektur) ist das fatal, weil Intervallrechnungen keine unbemerkten
-   Faktoren verzeihen.
-2. **Gemischte Vorzeichen.** pandapower nutzt fuer ``load`` das
-   Verbraucher-Zaehlpfeilsystem (``p_mw > 0`` = Bezug) und fuer ``sgen`` das
-   Erzeuger-Zaehlpfeilsystem (``p_mw > 0`` = Einspeisung). Ein Batteriespeicher
-   ist beides. Wenn diese Unterscheidung durch den Code wandert, kostet sie
-   irgendwann Tage.
+1. **Mixed units.** pandapower uses MW/MVar for power but per-unit for voltage.
+   Introducing kW or volts on top of that creates hidden conversions. For the
+   certification planned later (section 6.9 of the architecture) this is fatal,
+   because interval arithmetic does not forgive unnoticed factors.
+2. **Mixed sign conventions.** pandapower uses the consumer reference direction
+   for ``load`` (``p_mw > 0`` means consumption) and the generator reference
+   direction for ``sgen`` (``p_mw > 0`` means generation). A battery is both. If
+   that distinction travels through the codebase, it will eventually cost days.
 
-Die Festlegung wird durch ``tests/test_core.py`` erzwungen: jedes Feld eines
-Schema-Datentyps mit numerischem Typ muss ein bekanntes Einheiten-Suffix tragen.
+The commitment is enforced by ``tests/test_core.py``: every numeric field of a
+schema type must carry a known unit suffix.
 
-Siehe Architekturdokument §13 ("Einheitenkanon").
+See architecture document, section 13 ("unit convention").
 """
 
 from __future__ import annotations
@@ -26,60 +24,59 @@ from __future__ import annotations
 from typing import Final
 
 # ---------------------------------------------------------------------------
-# Vorzeichenkanon
+# Sign convention
 # ---------------------------------------------------------------------------
 
 SIGN_CONVENTION: Final[str] = "consumer"
-"""Durchgaengig Verbraucher-Zaehlpfeilsystem, **fuer alle** Anlagentypen.
+"""Consumer reference direction throughout, **for all** asset types.
 
-``p_mw > 0`` bedeutet immer Bezug aus dem Netz, ``p_mw < 0`` immer Einspeisung
-in das Netz. Daraus folgt:
+``p_mw > 0`` always means drawing power from the grid, ``p_mw < 0`` always means
+feeding into the grid. It follows that:
 
 ===================  ===========================================
-Anlage               Wertebereich
+Asset                Value range
 ===================  ===========================================
-Haushaltslast        ``p_mw >= 0``
-PV-Anlage            ``p_mw <= 0``
-Waermepumpe          ``p_mw >= 0``
-Ladepunkt (ohne V2G) ``p_mw >= 0``
-Batteriespeicher     ``p_mw > 0`` laden, ``p_mw < 0`` entladen
+Household load       ``p_mw >= 0``
+PV system            ``p_mw <= 0``
+Heat pump            ``p_mw >= 0``
+Charge point (no V2G) ``p_mw >= 0``
+Battery storage      ``p_mw > 0`` charging, ``p_mw < 0`` discharging
 ===================  ===========================================
 
-Die Umrechnung auf die pandapower-Konvention passiert ausschliesslich im
-Netz-Adapter (``lvgrid_rl.grid``) und nirgendwo sonst. Der Adapter ist damit
-die einzige Stelle, an der ein Vorzeichenfehler entstehen kann, und sie ist
-klein genug, um sie vollstaendig zu testen.
+Conversion to the pandapower convention happens exclusively in the grid adapter
+(``lvgrid_rl.grid``) and nowhere else. That adapter is therefore the only place
+where a sign error can arise, and it is small enough to test exhaustively.
 """
 
 # ---------------------------------------------------------------------------
-# Einheitenkanon
+# Unit convention
 # ---------------------------------------------------------------------------
 
 UNIT_SUFFIXES: Final[dict[str, str]] = {
-    # Leistung und Energie
-    "_mw": "Wirkleistung in MW (Verbraucher-Zaehlpfeil, siehe SIGN_CONVENTION)",
-    "_mvar": "Blindleistung in MVar (Verbraucher-Zaehlpfeil)",
-    "_mva": "Scheinleistung in MVA",
-    "_mwh": "Energie in MWh",
-    "_kwh": "Energie in kWh (nur in KPI-Ausgaben, nie im Zustand)",
-    # Elektrische Groessen
-    "_pu": "bezogene Groesse, per unit",
-    "_kv": "Spannung in kV (Nennspannungen, nicht Zustandsgroessen)",
-    "_a": "Strom in A",
-    "_percent": "Auslastung in Prozent (0..100, nicht 0..1)",
-    # Thermik und Wetter
-    "_degc": "absolute Temperatur in Grad Celsius",
-    "_k": "Temperaturdifferenz in Kelvin",
-    "_kh": "Komfortabweichung in Kelvinstunden",
-    "_wm2": "Bestrahlungsstaerke in W/m^2",
-    # Zeit
-    "_s": "Dauer in Sekunden",
-    "_min": "Dauer in Minuten",
-    # Dimensionslos
-    "_frac": "dimensionsloser Anteil im Intervall [0, 1]",
-    "_count": "Anzahl (ganzzahlig)",
+    # Power and energy
+    "_mw": "active power in MW (consumer reference, see SIGN_CONVENTION)",
+    "_mvar": "reactive power in MVar (consumer reference)",
+    "_mva": "apparent power in MVA",
+    "_mwh": "energy in MWh",
+    "_kwh": "energy in kWh (KPI output only, never in state)",
+    # Electrical quantities
+    "_pu": "per-unit quantity",
+    "_kv": "voltage in kV (nominal values, not state quantities)",
+    "_a": "current in A",
+    "_percent": "loading in percent (0..100, not 0..1)",
+    # Thermal and weather
+    "_degc": "absolute temperature in degrees Celsius",
+    "_k": "temperature difference in kelvin",
+    "_kh": "comfort deviation in kelvin-hours",
+    "_wm2": "irradiance in W/m^2",
+    # Time
+    "_s": "duration in seconds",
+    "_min": "duration in minutes",
+    # Dimensionless
+    "_frac": "dimensionless fraction in the interval [0, 1]",
+    "_count": "count (integer)",
 }
-"""Zulaessige Einheiten-Suffixe fuer numerische Felder in Schema-Datentypen."""
+"""Permitted unit suffixes for numeric fields of schema types."""
 
 _SUFFIXES_BY_LENGTH: Final[tuple[str, ...]] = tuple(
     sorted(UNIT_SUFFIXES, key=len, reverse=True)
@@ -87,16 +84,16 @@ _SUFFIXES_BY_LENGTH: Final[tuple[str, ...]] = tuple(
 
 
 def unit_of(field_name: str) -> str | None:
-    """Gibt das Einheiten-Suffix eines Feldnamens zurueck, oder ``None``.
+    """Return the unit suffix of a field name, or ``None``.
 
-    Die Suche laeuft vom laengsten zum kuerzesten Suffix, damit ``_mwh`` nicht
-    versehentlich als ``_mw`` erkannt wird.
+    The search runs from the longest to the shortest suffix so that ``_mwh`` is
+    not mistakenly recognised as ``_mw``.
 
     >>> unit_of("p_slack_mw")
     '_mw'
     >>> unit_of("energy_mwh")
     '_mwh'
-    >>> unit_of("irgendwas")
+    >>> unit_of("something_else")
     """
     for suffix in _SUFFIXES_BY_LENGTH:
         if field_name.endswith(suffix):
@@ -105,8 +102,8 @@ def unit_of(field_name: str) -> str | None:
 
 
 def describe_unit(field_name: str) -> str:
-    """Beschreibung der Einheit eines Feldnamens, fuer Fehlermeldungen."""
+    """Describe the unit of a field name, for error messages."""
     suffix = unit_of(field_name)
     if suffix is None:
-        return f"{field_name}: keine bekannte Einheit"
+        return f"{field_name}: no known unit"
     return f"{field_name}: {UNIT_SUFFIXES[suffix]}"

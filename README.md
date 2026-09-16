@@ -1,123 +1,127 @@
 # lvgrid-rl
 
-Trainingsumgebung für Reinforcement-Learning-Agenten zur autonomen Regelung von
-Niederspannungsnetzen. Die Agenten regeln Spannungsbandverletzungen sowie
-Leitungs- und Transformatorüberlastungen aus, indem sie PV-Einspeisung abregeln,
-Wärmepumpen- und Ladelasten verschieben und Batteriespeicher steuern.
+Training environment for reinforcement learning agents that autonomously control
+low-voltage distribution grids. The agents resolve voltage band violations as
+well as line and transformer overloads by curtailing PV infeed, shifting heat
+pump and charging loads, and controlling battery storage.
 
-Netzsimulation mit [pandapower](https://pandapower.readthedocs.io) und
-[SimBench](https://simbench.de), Agenten mit
+Grid simulation with [pandapower](https://pandapower.readthedocs.io) and
+[SimBench](https://simbench.de), agents with
 [Stable-Baselines3](https://stable-baselines3.readthedocs.io).
 
-**Stand: M0** — Skelett und Kernschemata. Es gibt noch keine Simulation und
-keinen Agenten. Was es gibt, ist die Schnittstellenschicht, auf der alles
-Weitere aufbaut, und eine geprüfte Reproduzierbarkeitskette.
+**Status: M1** -- skeleton, core schemas and data layer. There is no simulation
+and no agent yet. What exists is the interface layer everything else builds on,
+a verified reproducibility chain, and time series preparation from SimBench.
 
-Die vollständige Architektur steht in `docs/architektur.md`.
+The full architecture is in `docs/architektur.md`.
 
 ## Installation
 
-Empfohlen mit [uv](https://docs.astral.sh/uv/):
+Recommended with [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv sync                          # M0: numpy + Werkzeuge der Gruppe dev
-uv sync --extra sim --extra rl --extra config   # ab M1
+uv sync --extra sim              # M1: data layer including pandapower/simbench
+uv sync --extra sim --extra rl --extra config   # from M3
 ```
 
-`uv sync` installiert die Dependency Group `dev` standardmäßig; die schweren
-Abhängigkeiten liegen in Extras und kommen erst mit `--extra` dazu. Das ist
-Absicht: Skelett und Invariantentests sollen ohne pandapower und PyTorch
-laufen.
+`uv sync` installs the `dev` dependency group by default; the heavier
+dependencies live in extras. Note that `--extra sim` is required for the data
+layer -- without it, `pytest` silently skips 39 tests.
 
-Alternativ mit pip (benötigt pip ≥ 25.1 für `--group`):
+Alternatively with pip (requires pip >= 25.1 for `--group`):
 
 ```bash
-pip install -e . --group dev
+pip install -e ".[sim]" --group dev
 ```
 
-## Rauchtest
+## Quick start
 
 ```bash
-uv run python scripts/train.py --seed 1 --run-dir results/smoke
+uv run python scripts/prepare_data.py --code 1-LV-rural1--2-sw --sim-dt 5
 uv run pytest -v
 ```
 
-Wenn `uv run pytest` behauptet, `numpy` fehle, läuft ein `pytest` aus dem
-System-PATH statt aus `.venv`. `uv run python -m pytest` bindet pytest an den
-Interpreter der Umgebung und zeigt das sofort.
+`prepare_data.py` reads the SimBench time series, converts the time axis to UTC,
+resamples to the simulation step size and writes a Parquet cache with a content
+hash. `scripts/train.py` does not train anything yet; it resolves the
+configuration, derives the seeds and writes a run manifest -- which verifies the
+reproducibility chain before the first model exists.
 
-`scripts/train.py` trainiert noch nichts. Es löst die Konfiguration auf, leitet
-die Seeds ab und schreibt ein Run-Manifest — damit ist die
-Reproduzierbarkeitskette geprüft, bevor das erste Modell existiert.
+## Two conventions to know before your first contribution
 
-## Zwei Festlegungen, die man vor dem ersten Beitrag kennen sollte
+**Signs.** Consumer reference direction throughout, for *all* asset types:
+`p_mw > 0` means drawing from the grid, `p_mw < 0` means feeding in. A PV system
+therefore always has `p_mw <= 0`. Conversion to the pandapower convention
+(`sgen` counts the other way) happens exclusively in the grid adapter. See
+`lvgrid_rl.core.units.SIGN_CONVENTION`.
 
-**Vorzeichen.** Durchgängig Verbraucher-Zählpfeilsystem, für *alle*
-Anlagentypen: `p_mw > 0` ist Bezug aus dem Netz, `p_mw < 0` Einspeisung. Eine
-PV-Anlage hat also immer `p_mw <= 0`. Die Umrechnung auf die
-pandapower-Konvention (`sgen` zählt umgekehrt) passiert ausschließlich im
-Netzadapter. Siehe `lvgrid_rl.core.units.SIGN_CONVENTION`.
+**Units.** MW, MVar, MWh, per-unit, percent (0-100, not 0-1), degrees Celsius,
+kelvin, W/m². Every numeric field of a schema type carries a unit suffix, and a
+test enforces it. The reason is not tidiness: the certification planned later
+computes with intervals, and intervals do not forgive hidden conversion factors.
 
-**Einheiten.** MW, MVar, MWh, p.u., Prozent (0–100, nicht 0–1), °C, K, W/m².
-Jedes numerische Feld eines Schematyps trägt ein Einheiten-Suffix, und ein Test
-erzwingt das. Der Grund ist nicht Ordnungsliebe: die später geplante
-Zertifizierung rechnet mit Intervallen, und die verzeihen keine versteckten
-Konversionsfaktoren.
+## Layout
 
-## Aufbau
-
-| Paket | Schicht |
+| Package | Layer |
 |---|---|
-| `core` | Schemata, Protokolle, Einheitenkanon, Informationsordnung |
-| `data` | L0 Datenschicht: Quellen, Resampling, Cache, Szenarien |
-| `grid` | L1 Netz und Physik |
-| `components` | L2 Anlagen- und Flexibilitätsmodelle |
-| `env` | L3 Gymnasium-Environment |
-| `agents`, `baselines` | L4 Agenten und Referenzverfahren |
-| `eval`, `viz` | L5 KPIs, Auswertung, Visualisierung |
-| `experiment` | L6 Orchestrierung und Reproduzierbarkeit |
+| `core` | Schemas, protocols, unit convention, information ordering |
+| `data` | L0 data layer: sources, resampling, cache, scenarios |
+| `grid` | L1 grid and physics |
+| `components` | L2 asset and flexibility models |
+| `env` | L3 Gymnasium environment |
+| `agents`, `baselines` | L4 agents and reference methods |
+| `eval`, `viz` | L5 KPIs, evaluation, visualisation |
+| `experiment` | L6 orchestration and reproducibility |
 
-## Erweiterbarkeits-Contract
+## Time step sizes
 
-Die harten Sicherheitsgarantien (robuste konvexe Restriktion, prädiktiver
-Sicherheitsfilter) sind auf M7b verschoben. Damit sie dann ohne Umbau ergänzbar
-sind, gelten sieben Invarianten, jede mit einem Test in
-`tests/test_invariants.py`. Die noch offenen sind als `xfail(strict=True)`
-markiert: sobald die zugehörige Komponente existiert und der Test unerwartet
-grün wird, **bricht der Build** und erzwingt, den Marker zu entfernen. Die
-Anzahl der XFAIL-Meldungen ist der Schuldenstand des Contracts.
+`sim_dt` is restricted to 1, 2, 5 or 10 minutes. The reason is the voltage
+criterion: EN 50160 assesses 10-minute mean values, so the simulation step must
+divide 10 minutes exactly. This rules out 15 minutes -- which happens to be the
+native resolution of the SimBench time series, so those are upsampled piecewise
+constant, preserving energy.
 
-| | Invariante | Fällig | Stand in M0 |
+`gamma` is derived from `control_dt` rather than chosen: the criterion refers to
+a weekly interval, so the effective horizon has to cover one week. At a 15-minute
+control step that gives 0.99851.
+
+## Extensibility contract
+
+The hard safety guarantees (robust convex restriction, predictive safety filter)
+are deferred to M7b. So that they can be added later without rework, seven
+invariants apply, each with a test in `tests/test_invariants.py`. Open ones are
+marked `xfail(strict=True)`: once the corresponding component exists and the test
+turns green unexpectedly, **the build breaks** and forces the marker to be
+removed. The number of XFAIL reports is the contract's debt count.
+
+| | Invariant | Due | Status |
 |---|---|---|---|
-| I1 | `SystemState` vollständig, von `Observation` getrennt | M3 | Teilaussage grün |
-| I2 | Anlagendynamik als reine Funktion | M4 | offen |
-| I3 | Strikte Informationsordnung | M3 | Mechanismus grün |
-| I4 | Aktionen physikalisch, Normierung affin invertierbar | M3 | offen |
-| I5 | Hypothetischer Lastfluss ohne Seiteneffekt | M2 | offen |
-| I6 | Exogene Eingänge tragen Schranken, Ratings gepflegt | M1 | Schemaebene grün |
-| I7 | Zwei Sicherheits-Eingriffspunkte vorhanden | M3 | Null-Implementierung grün |
+| I1 | `SystemState` complete, separate from `Observation` | M3 | partially green |
+| I2 | Asset dynamics as pure functions | M4 | open |
+| I3 | Strict information ordering | M3 | mechanism green |
+| I4 | Physical actions, affine invertible normalisation | M3 | open |
+| I5 | Hypothetical power flow without side effects | M2 | open |
+| I6 | Exogenous inputs carry bounds, ratings maintained | M1 | **green** |
+| I7 | Both safety intervention points present | M3 | null implementation green |
 
-Der Grund für den Aufwand: Modularitätsversprechen verfallen still. Sechs
-Monate ohne Prüfung, und irgendeine sinnvolle Abkürzung hat die Erweiterbarkeit
-aufgebraucht, ohne dass es auffällt.
+The reason for the effort: promises of modularity decay silently. Six months
+without a check and some reasonable shortcut has used up the extensibility
+without anyone noticing.
 
-## Nächste Schritte
+## Next steps
 
-* **M1** Datenschicht: SimBench-Adapter, Resampling auf `sim_dt ∈ {1,2,5,10}`
-  min, Validierung, Parquet-Cache mit Manifest.
-* **M2** Netz: Loader, Asset-Mapping, `PowerFlowEngine` inklusive
-  hypothetischem Aufruf, `PQAggregator`, EN-50160-Evaluator — und die
-  P4-Vorabprüfung: existiert in den geplanten Ausbauszenarien überhaupt eine
-  zulässige Rückfallaktion?
+* **M2** grid: loader, asset mapping, `PowerFlowEngine` including the
+  hypothetical call, `PQAggregator`, EN 50160 evaluator -- and the P4 pre-check:
+  does a feasible fallback action exist at all in the planned scenarios?
 
-## Lizenz
+## License
 
-MIT, siehe [`LICENSE`](LICENSE).
+MIT, see [`LICENSE`](LICENSE).
 
-Für die Datensätze gilt das nicht: deren Bedingungen unterscheiden sich je
-Quelle. Das Repository enthält daher keine Rohdaten, sondern Bezugsskripte und
-Manifeste, siehe [`data/README.md`](data/README.md).
+This does not extend to the datasets; their terms differ per source. The
+repository therefore contains no raw data, only acquisition scripts and
+manifests, see [`data/README.md`](data/README.md).
 
-## Zitation
+## Citation
 
-Siehe [`CITATION.cff`](CITATION.cff).
+See [`CITATION.cff`](CITATION.cff).
