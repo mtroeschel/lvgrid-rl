@@ -232,21 +232,23 @@ Alle Aktoren implementieren ein gemeinsames Protokoll. Das ist der Schlüssel da
 class FlexAsset(Protocol):
     asset_id: str
     bus: int
-    ratings: AssetRatings      # S_max, P_max, Sicherungsnennstrom, vereinbarte Leistung
+    ratings: AssetRatings  # S_max, P_max, Sicherungsnennstrom, vereinbarte Leistung
 
-    def action_spec(self) -> ActionSpec: ...   # Box/Discrete in PHYSIKALISCHEN Einheiten
+    def action_spec(self) -> ActionSpec: ...  # Box/Discrete in PHYSIKALISCHEN Einheiten
     def obs_spec(self) -> ObsSpec: ...
     def initial_state(self, rng: Generator, window: ScenarioWindow) -> AssetState: ...
 
     # --- reine Funktionen, kein self-Zustand ------------------------------
-    def to_setpoint(self, s: AssetState, action: np.ndarray,
-                    x: ExogenousInput) -> Setpoint:
+    def to_setpoint(
+        self, s: AssetState, action: np.ndarray, x: ExogenousInput
+    ) -> Setpoint:
         # Aktion -> (p_mw, q_mvar). Affin und invertierbar; jede Begrenzung
         # wird in Setpoint.clipping_info gemeldet, nicht still vorgenommen.
         ...
 
-    def dynamics(self, s: AssetState, sp: Setpoint,
-                 x: ExogenousInput, g: GridState) -> tuple[AssetState, AssetOutcome]:
+    def dynamics(
+        self, s: AssetState, sp: Setpoint, x: ExogenousInput, g: GridState
+    ) -> tuple[AssetState, AssetOutcome]:
         # Zustandsfortschreibung als reine Funktion: gleiche Eingabe -> gleiche
         # Ausgabe, kein Seiteneffekt. Erlaubt hypothetisches Vorausrechnen.
         ...
@@ -607,8 +609,9 @@ Die Garantie lebt im Code, nicht im Aufsatz. Vier Maßnahmen, ohne die die Aussa
 
 ```python
 class SafetyCertifier(Protocol):
-    def certify(self, state: SystemState, action: np.ndarray,
-                uncertainty: UncertaintySet) -> Verdict:
+    def certify(
+        self, state: SystemState, action: np.ndarray, uncertainty: UncertaintySet
+    ) -> Verdict:
         # Verdict: CERTIFIED_SAFE oder NOT_CERTIFIED.
         # Niemals "unsafe" behaupten: NOT_CERTIFIED heisst "nicht beweisbar",
         # und das genuegt fuer den Rueckfall.

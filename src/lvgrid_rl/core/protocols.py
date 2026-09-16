@@ -288,9 +288,7 @@ class SafetyComponent(Protocol):
         """Aktion gegebenenfalls veraendern."""
         ...
 
-    def action_mask(
-        self, state: SystemState, info: InformationSet
-    ) -> np.ndarray | None:
+    def action_mask(self, state: SystemState, info: InformationSet) -> np.ndarray | None:
         """Maske zulaessiger diskreter Aktionen, oder ``None``."""
         ...
 
@@ -308,9 +306,7 @@ class NullSafetyComponent:
         """Gibt die Aktion unveraendert zurueck."""
         return action, InterventionInfo(intervened=False)
 
-    def action_mask(
-        self, state: SystemState, info: InformationSet
-    ) -> np.ndarray | None:
+    def action_mask(self, state: SystemState, info: InformationSet) -> np.ndarray | None:
         """Erlaubt alle Aktionen."""
         return None
 

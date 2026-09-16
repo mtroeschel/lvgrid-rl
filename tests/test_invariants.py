@@ -230,8 +230,7 @@ def test_i6_exogenous_input_cannot_be_built_without_bounds() -> None:
     required = {
         f.name
         for f in dataclasses.fields(ExogenousInput)
-        if f.default is dataclasses.MISSING
-        and f.default_factory is dataclasses.MISSING  # type: ignore[misc]
+        if f.default is dataclasses.MISSING and f.default_factory is dataclasses.MISSING  # type: ignore[misc]
     }
     assert "bounds_mw" in required
 

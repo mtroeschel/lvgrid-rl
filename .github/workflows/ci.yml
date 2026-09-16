@@ -26,19 +26,35 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Die untere unterstuetzte Version, nicht die neueste: was hier laeuft,
+      # laeuft auch auf allem Neueren.
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      # --locked bricht ab, wenn uv.lock nicht zu pyproject.toml passt. Damit
+      # kann eine Abhaengigkeitsaenderung ohne aktualisiertes Lockfile nicht
+      # unbemerkt durchrutschen, und die CI rechnet nachweislich mit denselben
+      # Versionen wie der Entwicklungsrechner.
       - name: Installieren
-        run: pip install -e ".[dev]"
+        run: uv sync --locked
 
       - name: Linting
-        run: ruff check src tests
+        run: uv run ruff check src tests
+
+      # Muss hier stehen, damit CI und Pre-Commit-Hook dasselbe Urteil faellen.
+      # Ohne diesen Schritt koennte ungeformatierter Code die CI passieren und
+      # wuerde dann beim naechsten Entwickler vom Hook umformatiert.
+      - name: Formatierung
+        run: uv run ruff format --check src tests scripts
 
       # -rx listet die offenen Invarianten (xfail) in der Zusammenfassung auf.
       # Die Anzahl ist der Schuldenstand des Erweiterbarkeits-Contracts. Durch
       # strict=True bricht ein unerwartet gruener Invariantentest den Build und
       # erzwingt, den Marker zu entfernen.
       - name: Tests und offene Invarianten
-        run: pytest -q -rx
+        run: uv run pytest -q -rx

@@ -115,9 +115,7 @@ class AssetRatings:
 
     def __post_init__(self) -> None:
         if not self.p_min_mw <= self.p_max_mw:
-            raise ValueError(
-                f"p_min_mw={self.p_min_mw} > p_max_mw={self.p_max_mw}"
-            )
+            raise ValueError(f"p_min_mw={self.p_min_mw} > p_max_mw={self.p_max_mw}")
         if self.s_max_mva is not None and self.s_max_mva < 0.0:
             raise ValueError("s_max_mva darf nicht negativ sein")
 
@@ -176,9 +174,7 @@ class ExogenousInput:
         outside = (self.realized_mw < lo - tol) | (self.realized_mw > hi + tol)
         if np.any(outside):
             bad = [self.series_ids[i] for i in np.flatnonzero(outside)]
-            raise ValueError(
-                f"Realisierung liegt ausserhalb der Schranken fuer: {bad}"
-            )
+            raise ValueError(f"Realisierung liegt ausserhalb der Schranken fuer: {bad}")
         object.__setattr__(self, "realized_mw", freeze_array(self.realized_mw))
         object.__setattr__(self, "bounds_mw", freeze_array(self.bounds_mw))
 

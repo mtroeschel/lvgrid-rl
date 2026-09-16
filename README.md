@@ -17,20 +17,34 @@ Die vollständige Architektur steht in `docs/architektur.md`.
 
 ## Installation
 
+Empfohlen mit [uv](https://docs.astral.sh/uv/):
+
 ```bash
-pip install -e ".[dev]"          # M0: nur numpy + Testwerkzeuge
-pip install -e ".[dev,sim,rl,config]"   # ab M1
+uv sync                          # M0: numpy + Werkzeuge der Gruppe dev
+uv sync --extra sim --extra rl --extra config   # ab M1
 ```
 
-Die schweren Abhängigkeiten sind absichtlich optional: das Skelett und die
-Invariantentests sollen ohne pandapower und PyTorch laufen.
+`uv sync` installiert die Dependency Group `dev` standardmäßig; die schweren
+Abhängigkeiten liegen in Extras und kommen erst mit `--extra` dazu. Das ist
+Absicht: Skelett und Invariantentests sollen ohne pandapower und PyTorch
+laufen.
+
+Alternativ mit pip (benötigt pip ≥ 25.1 für `--group`):
+
+```bash
+pip install -e . --group dev
+```
 
 ## Rauchtest
 
 ```bash
-python scripts/train.py --seed 1 --run-dir results/smoke
-pytest -v
+uv run python scripts/train.py --seed 1 --run-dir results/smoke
+uv run pytest -v
 ```
+
+Wenn `uv run pytest` behauptet, `numpy` fehle, läuft ein `pytest` aus dem
+System-PATH statt aus `.venv`. `uv run python -m pytest` bindet pytest an den
+Interpreter der Umgebung und zeigt das sofort.
 
 `scripts/train.py` trainiert noch nichts. Es löst die Konfiguration auf, leitet
 die Seeds ab und schreibt ein Run-Manifest — damit ist die

@@ -46,11 +46,26 @@ rl = [
   "torch>=2.2",
 ]
 config = ["hydra-core>=1.3", "omegaconf>=2.3"]
-dev = ["pytest>=8", "pytest-cov", "ruff>=0.4", "mypy>=1.10"]
 
 [project.urls]
 Repository = "https://github.com/mtroeschel/lvgrid-rl"
 Issues = "https://github.com/mtroeschel/lvgrid-rl/issues"
+
+# Entwicklungsabhaengigkeiten als Dependency Group nach PEP 735, nicht als
+# Extra. Der Unterschied ist praktisch entscheidend: `uv sync` und `uv run`
+# installieren die Gruppe `dev` standardmaessig, ein Extra dagegen nur mit
+# explizitem `--extra dev`. Lag pytest nur im Extra, griff `uv run pytest` auf
+# ein pytest aus dem System-PATH zurueck, das mit dem System-Interpreter laeuft
+# und die Pakete der virtuellen Umgebung nicht sieht.
+# ruff ist exakt gepinnt und mit rev in .pre-commit-config.yaml identisch.
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "pytest-cov",
+  "ruff==0.16.7",
+  "mypy>=1.10",
+  "pre-commit>=3.7",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lvgrid_rl"]

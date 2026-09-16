@@ -6,6 +6,8 @@ __pycache__/
 *.egg-info/
 .venv/
 *Zone.Identifier
+# uv.lock wird ABSICHTLICH nicht ignoriert: es ist Teil der
+# Reproduzierbarkeitskette (Abschnitt 8.2 der Architektur).
 # Ergebnisse und Datencaches werden nicht versioniert. Reproduzierbarkeit laeuft
 # ueber Konfiguration, Seeds und Datenmanifest, nicht ueber eingecheckte Artefakte.
 results/

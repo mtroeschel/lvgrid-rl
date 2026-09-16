@@ -22,10 +22,11 @@ import json
 import platform
 import subprocess
 import sys
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 
@@ -149,9 +150,9 @@ def compute_run_id(
     code_commit: str, config_hash_: str, data_manifest_hash: str, seed: int
 ) -> str:
     """Zwoelfstellige Run-Kennung aus den vier bestimmenden Groessen."""
-    return _sha256(
-        canonical_json([code_commit, config_hash_, data_manifest_hash, seed])
-    )[:12]
+    return _sha256(canonical_json([code_commit, config_hash_, data_manifest_hash, seed]))[
+        :12
+    ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,7 +194,7 @@ class RunManifest:
             config_hash=cfg_hash,
             data_manifest_hash=data_manifest_hash,
             seeds=SeedSet.from_base(base_seed),
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
             python_version=sys.version.split()[0],
             platform=platform.platform(),
             package_versions=dict(package_versions or {}),
@@ -201,6 +202,7 @@ class RunManifest:
         )
 
     def to_json(self) -> str:
+        """Manifest als einger\u00fccktes JSON mit sortierten Schluesseln."""
         return json.dumps(asdict(self), indent=2, sort_keys=True)
 
     def write(self, run_dir: Path) -> Path:
