@@ -1,16 +1,15 @@
-"""Resampling der Zeitreihen auf die einheitliche Simulationsschrittweite.
+"""Resampling of time series onto the uniform simulation step size.
 
-Die Aggregationsregel haengt von der physikalischen Bedeutung der Groesse ab,
-nicht vom Datentyp. Ein Mittelwert ueber Leistungen erhaelt die Energie; ein
-Mittelwert ueber einen binaeren Verfuegbarkeitsstatus ergibt Unsinn. Die
-Zuordnung steht deshalb explizit in der Konfiguration und nicht als Default im
-Code (Tabelle in Abschnitt 3.3 der Architektur).
+The aggregation rule depends on the physical meaning of a quantity, not on its
+data type. A mean over power preserves energy; a mean over a binary availability
+flag is nonsense. The mapping therefore lives explicitly in the configuration
+rather than as a default in the code (table in section 3.3 of the architecture
+document).
 
-Beim Hochrechnen (SimBench liefert 15 min, die Simulation braucht 5 min) gilt
-dasselbe umgekehrt: Leistungen werden stueckweise konstant fortgeschrieben,
-weil das die Energie des Ursprungsintervalls erhaelt. Lineare Interpolation
-taete das nicht und wuerde zusaetzlich Rampen erfinden, die in den Daten nicht
-stehen.
+When upsampling -- SimBench supplies fifteen minutes, the simulation needs five
+-- the same reasoning applies in reverse: power is carried forward piecewise
+constant, because that preserves the energy of the source interval. Linear
+interpolation would not, and it would invent ramps that are not in the data.
 """
 
 from __future__ import annotations
@@ -22,20 +21,27 @@ import pandas as pd
 
 from lvgrid_rl.data.timebase import TimeBase
 
-__all__ = ["Policy", "resample_series", "resample_frame", "DEFAULT_POLICIES"]
+__all__ = [
+    "Policy",
+    "DEFAULT_POLICIES",
+    "resample_series",
+    "resample_frame",
+    "energy_error",
+]
 
 
 class Policy(StrEnum):
-    """Aggregationsregel einer Groesse.
+    """Aggregation rule for a quantity.
 
     Attributes:
-        MEAN: Leistungen. Beim Verdichten energieerhaltender Mittelwert, beim
-            Hochrechnen stueckweise konstant.
-        DIFF: Energiezaehlerstaende. Beim Verdichten Differenz ueber das
-            Intervall.
-        LAST: Zustandsgroessen wie Ladezustand. Endwert des Intervalls.
-        MAJORITY: Binaere Groessen wie "Fahrzeug angesteckt". Mehrheitsentscheid.
-        LINEAR: Stetige Umgebungsgroessen wie Temperatur.
+        MEAN: Power. Energy-preserving mean when downsampling, piecewise
+            constant when upsampling.
+        DIFF: Energy meter readings. Difference over the interval when
+            downsampling.
+        LAST: State quantities such as state of charge. End value of the
+            interval.
+        MAJORITY: Binary quantities such as "vehicle plugged in". Majority vote.
+        LINEAR: Continuous ambient quantities such as temperature.
     """
 
     MEAN = "mean"
@@ -53,64 +59,62 @@ DEFAULT_POLICIES: Mapping[str, Policy] = {
     "availability": Policy.MAJORITY,
     "state": Policy.LAST,
 }
-"""Zuordnung Groessenart -> Regel, wie in ``configs/data/default.yaml``."""
+"""Mapping quantity kind -> rule, as in ``configs/data/default.yaml``."""
 
 
 def _infer_source_freq(index: pd.DatetimeIndex) -> pd.Timedelta:
-    """Ermittelt die Schrittweite eines regelmaessigen Index.
+    """Determine the step size of a regular index.
 
     Raises:
-        ValueError: bei unregelmaessigem Index. Das ist fast immer ein
-            unbehandelter Sommerzeitwechsel (siehe
-            :func:`lvgrid_rl.data.timebase.to_utc_index`) und darf nicht
-            stillschweigend mit einer geschaetzten Frequenz ueberdeckt werden.
+        ValueError: on an irregular index. That is almost always an unhandled
+            daylight saving transition (see
+            :func:`lvgrid_rl.data.timebase.to_utc_index`) and must not be
+            papered over with an estimated frequency.
     """
     diffs = pd.Series(index).diff().dropna().unique()
     if len(diffs) != 1:
         raise ValueError(
-            f"Unregelmaessiger Zeitindex, {len(diffs)} verschiedene Schrittweiten: "
-            f"{sorted(pd.to_timedelta(diffs))[:5]}. Meist ein nicht nach UTC "
-            "konvertierter Index mit Sommerzeitwechsel."
+            f"Irregular time index, {len(diffs)} distinct step sizes: "
+            f"{sorted(pd.to_timedelta(diffs))[:5]}. Usually an index that was "
+            "not converted to UTC and still carries a daylight saving transition."
         )
     return pd.Timedelta(diffs[0])
 
 
 def resample_series(s: pd.Series, target: pd.Timedelta, policy: Policy) -> pd.Series:
-    """Bringt eine Zeitreihe auf die Zielschrittweite.
+    """Bring a time series onto the target step size.
 
     Args:
-        s: Zeitreihe mit regelmaessigem, tz-behaftetem Index.
-        target: Zielschrittweite.
-        policy: Aggregationsregel.
+        s: Time series with a regular, timezone-aware index.
+        target: Target step size.
+        policy: Aggregation rule.
 
     Returns:
-        Zeitreihe mit der Zielschrittweite und demselben Zeitbereich.
+        A time series at the target step size covering the same period.
 
     Raises:
-        ValueError: wenn Quell- und Zielschrittweite kein ganzzahliges
-            Verhaeltnis haben. Dann waere jede Umrechnung eine Interpolation
-            mit Rasterversatz, und der entstehende Fehler waere nicht
-            nachvollziehbar.
+        ValueError: if source and target step size are not in an integer ratio.
+            Any conversion would then be an interpolation with a grid offset,
+            and the resulting error would not be traceable.
     """
     source = _infer_source_freq(pd.DatetimeIndex(s.index))
     if source == target:
         return s.copy()
 
-    if source > target:  # Hochrechnen
+    if source > target:  # upsampling
         if source % target != pd.Timedelta(0):
             raise ValueError(
-                f"Quellschrittweite {source} ist kein Vielfaches der "
-                f"Zielschrittweite {target}"
+                f"Source step size {source} is not a multiple of the target step "
+                f"size {target}"
             )
-        # Der letzte Quellwert deckt ein volles Quellintervall ab; der Index
-        # muss deshalb ueber das letzte Original-Zeitstempel hinaus verlaengert
-        # werden, sonst fehlt am Jahresende ein Teilintervall.
+        # The last source value covers a full source interval, so the index has
+        # to extend beyond the last original timestamp -- otherwise a partial
+        # interval is missing at the end of the year.
         end = s.index[-1] + source - target
         new_index = pd.date_range(s.index[0], end, freq=target)
         if policy in (Policy.MEAN, Policy.MAJORITY, Policy.LAST, Policy.DIFF):
-            # Stueckweise konstant. Fuer MEAN erhaelt das die Energie des
-            # Quellintervalls, fuer DIFF wird der Zaehlerzuwachs gleichmaessig
-            # verteilt (siehe unten).
+            # Piecewise constant. For MEAN this preserves the energy of the
+            # source interval; for DIFF the meter increment is spread evenly.
             out = s.reindex(new_index, method="ffill")
             if policy == Policy.DIFF:
                 out = out / (source // target)
@@ -119,13 +123,13 @@ def resample_series(s: pd.Series, target: pd.Timedelta, policy: Policy) -> pd.Se
             return (
                 s.reindex(s.index.union(new_index)).interpolate("time").reindex(new_index)
             )
-        raise AssertionError(f"Unbehandelte Regel {policy}")
+        raise AssertionError(f"Unhandled rule {policy}")
 
-    # Verdichten
+    # downsampling
     if target % source != pd.Timedelta(0):
         raise ValueError(
-            f"Zielschrittweite {target} ist kein Vielfaches der "
-            f"Quellschrittweite {source}"
+            f"Target step size {target} is not a multiple of the source step "
+            f"size {source}"
         )
     grouper = s.resample(target, label="left", closed="left")
     if policy == Policy.MEAN:
@@ -137,11 +141,11 @@ def resample_series(s: pd.Series, target: pd.Timedelta, policy: Policy) -> pd.Se
     if policy == Policy.LINEAR:
         return grouper.mean()
     if policy == Policy.MAJORITY:
-        # Mehrheitsentscheid ueber 0/1; bei Gleichstand faellt die Entscheidung
-        # zugunsten von "verfuegbar", weil eine faelschlich als nicht verfuegbar
-        # gewertete Ladesaeule Flexibilitaet verschenkt, die real vorhanden war.
+        # Majority vote over 0/1. A tie resolves in favour of "available",
+        # because wrongly marking a charge point unavailable throws away
+        # flexibility that was really there.
         return (grouper.mean() >= 0.5).astype(float)
-    raise AssertionError(f"Unbehandelte Regel {policy}")
+    raise AssertionError(f"Unhandled rule {policy}")
 
 
 def resample_frame(
@@ -150,16 +154,16 @@ def resample_frame(
     policies: Mapping[str, Policy],
     default: Policy = Policy.MEAN,
 ) -> pd.DataFrame:
-    """Resampelt alle Spalten eines DataFrame gemaess Spaltenregeln.
+    """Resample all columns of a frame according to per-column rules.
 
     Args:
-        df: Zeitreihen im Wide-Format, Index in UTC.
-        timebase: Zielschrittweite.
-        policies: Zuordnung Spaltenname -> Regel.
-        default: Regel fuer Spalten ohne Eintrag.
+        df: Time series in wide format, index in UTC.
+        timebase: Target step size.
+        policies: Mapping column name -> rule.
+        default: Rule for columns without an entry.
 
     Returns:
-        DataFrame mit der Zielschrittweite.
+        A frame at the target step size.
     """
     target = timebase.freq
     cols = {
@@ -172,15 +176,14 @@ def resample_frame(
 
 
 def energy_error(original: pd.Series, resampled: pd.Series) -> float:
-    """Relativer Energiefehler einer Leistungszeitreihe nach dem Resampling.
+    """Relative energy error of a power series after resampling.
 
-    Die Werte sind Intervallmittelwerte der Leistung, keine Punktabtastungen.
-    Die Energie ist deshalb ``sum(p) * dt`` (Rechteckregel); eine Trapezregel
-    waere hier falsch, weil sie die Randintervalle halb gewichtet.
+    The values are interval means of power, not point samples. Energy is
+    therefore ``sum(p) * dt`` (rectangle rule); a trapezoidal rule would be
+    wrong here because it half-weights the boundary intervals.
 
-    Fuer :attr:`Policy.MEAN` muss der Fehler exakt null sein, solange die
-    Zeitbereiche uebereinstimmen. Dient als Pruefgroesse in Tests und in der
-    Datenvalidierung.
+    For :attr:`Policy.MEAN` the error must be exactly zero as long as the time
+    ranges match. Used as a check quantity in tests and in data validation.
     """
     dt_orig = _infer_source_freq(pd.DatetimeIndex(original.index))
     dt_new = _infer_source_freq(pd.DatetimeIndex(resampled.index))

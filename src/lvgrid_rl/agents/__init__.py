@@ -1,1 +1,1 @@
-"""Paket lvgrid_rl.agents (ab M1 ff.)."""
+"""Package lvgrid_rl.agents."""

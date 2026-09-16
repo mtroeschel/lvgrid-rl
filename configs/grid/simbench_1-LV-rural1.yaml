@@ -1,15 +1,19 @@
-# Startnetz: laendliches NS-Netz mit langen Straengen. Fuer ein
-# spannungsgetriebenes Kriterium (EN 50160) der aussagekraeftigste Einstieg.
+# Base development stage of rural1, kept as a low-penetration comparison case.
+#
+# Note that the control problem barely exists here: this stage has 13 households
+# and 4 PV systems, but no storage, heat pumps or charge points -- so only one of
+# the four actuators this project is about. Use simbench_1-LV-rural1-future.yaml
+# as the working grid.
 simbench_code: 1-LV-rural1--0-sw
-phase_model: balanced   # balanced | unbalanced; siehe Abschnitt 13
-# Netzanschlusspunkte: Vereinigung der Busse mit Last-, Erzeuger- oder
-# Speicherelement (Entscheidung D7). Die Ausnahmeliste fuer Ersatzeinspeiser
-# wird in M2 einmalig manuell geprueft und hier fixiert.
+phase_model: balanced   # balanced | unbalanced; see section 13
+# Connection points: union of buses carrying a load, generator or storage element
+# (decision D7). The exclusion list for equivalent infeeds is checked manually
+# once per grid and fixed here.
 connection_points:
   element_types: [load, sgen, gen, storage, asymmetric_load, asymmetric_sgen]
   exclude_buses: []
   exclude_elements: []
   require_nonzero_annual_energy: true
-  # Hash der resultierenden Busliste; verhindert, dass eine stille Aenderung
-  # die KPI unbemerkt verschiebt.
+  # Hash of the resulting bus list; prevents a silent change from shifting the
+  # KPI unnoticed.
   expected_hash: null

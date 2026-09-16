@@ -1,1 +1,1 @@
-"""Paket lvgrid_rl.components (ab M1 ff.)."""
+"""Package lvgrid_rl.components."""

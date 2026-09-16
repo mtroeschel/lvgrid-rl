@@ -1,5 +1,6 @@
-# Hydra-Root. Die Gruppen sind ab M0 vorhanden, aber bis auf grid/env noch leer;
-# das haelt die Konfigurationsstruktur stabil, waehrend die Module entstehen.
+# Hydra root. The groups exist from M0 onwards; some are still empty while the
+# corresponding modules are being built. Keeping the structure stable avoids
+# reshuffling configurations later.
 defaults:
   - grid: simbench_1-LV-rural1-future
   - data: default

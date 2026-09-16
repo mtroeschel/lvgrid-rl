@@ -1,21 +1,19 @@
-"""Aufbereitungs-Cache und Datenmanifest.
+"""Preparation cache and data manifest.
 
-Der Cache liegt als Parquet unter einem Schluessel, der aus allen Groessen
-gebildet wird, die das Ergebnis beeinflussen: Quelle und Version, Zeitraum,
-Schrittweite, Resampling-Regeln und Pipeline-Version. Dieselbe Eingabe ergibt
-denselben Schluessel, eine geaenderte Regel einen anderen -- ein stiller
-Treffer auf veralteten Daten ist damit ausgeschlossen.
+The cache is stored as Parquet under a key formed from everything that
+influences the result: source and version, period, step size, resampling rules
+and pipeline version. The same input yields the same key, a changed rule a
+different one -- a silent hit on stale data is therefore impossible.
 
-Das Manifest haelt zusaetzlich einen SHA-256 ueber den *Inhalt* der
-aufbereiteten Profile. Das ist der Nachweis, auf den sich die
-Reproduzierbarkeitskette stuetzt (Abschnitt 8.2): wer dieselben Rohdaten
-bezieht und dieselbe Konfiguration verwendet, erhaelt denselben Hash. Da das
-Repository bewusst keine Daten enthaelt (``data/README.md``), ist dieser Hash
-der Beleg, dass Dritte tatsaechlich mit denselben Zeitreihen rechnen.
+The manifest additionally holds a SHA-256 over the *content* of the prepared
+profiles. This is the evidence the reproducibility chain rests on (section 8.2):
+whoever obtains the same raw data and uses the same configuration gets the same
+hash. Since the repository deliberately contains no data (``data/README.md``),
+that hash is the proof that third parties really compute with the same series.
 
-Fuer SimBench gibt es keine heruntergeladene Rohdatei, die sich hashen liesse --
-die Daten kommen aus dem installierten Paket. Gehasht wird deshalb der
-materialisierte Profil-Frame, und die Paketversion geht in den Schluessel ein.
+For SimBench there is no downloaded raw file to hash -- the data comes from the
+installed package. What is hashed is therefore the materialised profile frame,
+and the package version enters the key.
 """
 
 from __future__ import annotations
@@ -29,22 +27,30 @@ from typing import Any
 
 import pandas as pd
 
-__all__ = ["PIPELINE_VERSION", "CacheKey", "DataManifest", "ProfileCache"]
+__all__ = [
+    "PIPELINE_VERSION",
+    "frame_hash",
+    "CacheKey",
+    "DataManifest",
+    "ProfileCache",
+]
 
-PIPELINE_VERSION = "1"
-"""Bei jeder Aenderung an der Aufbereitungslogik erhoehen.
+PIPELINE_VERSION = "2"
+"""Increment on every change to the preparation logic.
 
-Die Version geht in den Cache-Schluessel ein. Ohne sie wuerde eine korrigierte
-Resampling-Regel auf bereits zwischengespeicherten Ergebnissen unbemerkt
-wirkungslos bleiben.
+The version enters the cache key. Without it, a corrected resampling rule would
+silently have no effect on already cached results.
+
+Version 2 adds the reactive power profiles, which changes the set of columns and
+therefore the content hash.
 """
 
 
 def frame_hash(df: pd.DataFrame) -> str:
-    """SHA-256 ueber Inhalt, Spaltennamen und Zeitachse eines DataFrame.
+    """SHA-256 over content, column names and time axis of a frame.
 
-    Bewusst nicht ueber die Parquet-Datei: deren Bytes haengen von
-    Bibliotheksversion und Kompression ab, der Inhalt nicht.
+    Deliberately not over the Parquet file: its bytes depend on library version
+    and compression, the content does not.
     """
     h = hashlib.sha256()
     h.update(",".join(map(str, df.columns)).encode("utf-8"))
@@ -57,14 +63,14 @@ def frame_hash(df: pd.DataFrame) -> str:
 
 @dataclass(frozen=True, slots=True)
 class CacheKey:
-    """Alle Groessen, die das Aufbereitungsergebnis bestimmen.
+    """Everything that determines the preparation result.
 
     Args:
-        source: Name der Quelle, etwa ``"simbench"``.
-        source_version: Version des Quellpakets oder des Datensatzes.
-        dataset: Bezeichner innerhalb der Quelle, etwa der SimBench-Code.
-        sim_dt_min: Zielschrittweite.
-        policies: Angewandte Resampling-Regeln.
+        source: Name of the source, for example ``"simbench"``.
+        source_version: Version of the source package or dataset.
+        dataset: Identifier within the source, e.g. the SimBench code.
+        sim_dt_min: Target step size.
+        policies: Resampling rules applied.
         pipeline_version: :data:`PIPELINE_VERSION`.
     """
 
@@ -76,28 +82,28 @@ class CacheKey:
     pipeline_version: str = PIPELINE_VERSION
 
     def digest(self) -> str:
-        """Zwoelfstelliger Schluessel, geeignet als Dateiname."""
+        """Twelve-character key, usable as a file name."""
         payload = json.dumps(asdict(self), sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
     def filename(self) -> str:
-        """Dateiname des Cache-Eintrags."""
+        """File name of the cache entry."""
         safe = self.dataset.replace("/", "_")
         return f"{self.source}_{safe}_{self.sim_dt_min}min_{self.digest()}.parquet"
 
 
 @dataclass(frozen=True, slots=True)
 class DataManifest:
-    """Nachweis ueber die verwendeten Daten.
+    """Evidence about the data that was used.
 
     Args:
-        key: Der Cache-Schluessel.
-        content_hash: SHA-256 ueber den aufbereiteten Profil-Frame.
-        n_rows: Anzahl Zeitschritte.
-        n_columns: Anzahl Profilspalten.
-        start_utc: Erster Zeitstempel.
-        end_utc: Letzter Zeitstempel.
-        notes: Freitext, etwa dokumentierte Annahmen der Aufbereitung.
+        key: The cache key.
+        content_hash: SHA-256 over the prepared profile frame.
+        n_rows: Number of time steps.
+        n_columns: Number of profile columns.
+        start_utc: First timestamp.
+        end_utc: Last timestamp.
+        notes: Free text, e.g. documented assumptions of the preparation.
     """
 
     key: CacheKey
@@ -109,45 +115,45 @@ class DataManifest:
     notes: str = ""
 
     def to_json(self) -> str:
-        """Manifest als eingeruecktes JSON."""
+        """Manifest as indented JSON."""
         return json.dumps(asdict(self), indent=2, sort_keys=True, default=str)
 
     @property
     def short_hash(self) -> str:
-        """Erste zwoelf Stellen des Inhalts-Hash, fuer Logausgaben."""
+        """First twelve characters of the content hash, for log output."""
         return self.content_hash[:12]
 
 
 class ProfileCache:
-    """Parquet-Cache fuer aufbereitete Profile.
+    """Parquet cache for prepared profiles.
 
     Args:
-        root: Verzeichnis des Caches. Wird bei Bedarf angelegt und ist in
-            ``.gitignore`` ausgeschlossen.
+        root: Cache directory. Created on demand and excluded in
+            ``.gitignore``.
     """
 
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
 
     def path_for(self, key: CacheKey) -> Path:
-        """Pfad des Cache-Eintrags zu einem Schluessel."""
+        """Path of the cache entry for a key."""
         return self.root / key.filename()
 
     def manifest_path_for(self, key: CacheKey) -> Path:
-        """Pfad des zugehoerigen Manifests."""
+        """Path of the associated manifest."""
         return self.path_for(key).with_suffix(".manifest.json")
 
     def has(self, key: CacheKey) -> bool:
-        """Liegt ein Eintrag zu diesem Schluessel vor?"""
+        """Is there an entry for this key?"""
         return self.path_for(key).exists()
 
     def store(
         self, key: CacheKey, profiles: pd.DataFrame, notes: str = ""
     ) -> DataManifest:
-        """Legt Profile und Manifest ab.
+        """Store profiles and manifest.
 
         Returns:
-            Das geschriebene Manifest.
+            The manifest that was written.
         """
         self.root.mkdir(parents=True, exist_ok=True)
         profiles.to_parquet(self.path_for(key), compression="zstd")
@@ -164,17 +170,17 @@ class ProfileCache:
         return manifest
 
     def load(self, key: CacheKey) -> tuple[pd.DataFrame, DataManifest]:
-        """Laedt Profile und Manifest und prueft den Inhalts-Hash.
+        """Load profiles and manifest and verify the content hash.
 
         Raises:
-            FileNotFoundError: wenn kein Eintrag vorliegt.
-            ValueError: wenn der Inhalts-Hash nicht zum Manifest passt. Das
-                bedeutet, dass die Datei nach dem Schreiben veraendert wurde,
-                und entwertet jede darauf gestuetzte Reproduzierbarkeitsaussage.
+            FileNotFoundError: if there is no entry.
+            ValueError: if the content hash does not match the manifest. That
+                means the file was altered after writing, which voids every
+                reproducibility statement resting on it.
         """
         path = self.path_for(key)
         if not path.exists():
-            raise FileNotFoundError(f"Kein Cache-Eintrag unter {path}")
+            raise FileNotFoundError(f"No cache entry at {path}")
         profiles = pd.read_parquet(path)
         raw: dict[str, Any] = json.loads(
             self.manifest_path_for(key).read_text(encoding="utf-8")
@@ -191,7 +197,7 @@ class ProfileCache:
         actual = frame_hash(profiles)
         if actual != manifest.content_hash:
             raise ValueError(
-                f"Inhalts-Hash von {path.name} weicht vom Manifest ab "
-                f"({actual[:12]} statt {manifest.short_hash})."
+                f"Content hash of {path.name} differs from the manifest "
+                f"({actual[:12]} instead of {manifest.short_hash})."
             )
         return profiles, manifest

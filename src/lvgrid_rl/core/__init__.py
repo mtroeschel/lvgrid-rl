@@ -1,1 +1,1 @@
-"""Paket lvgrid_rl/core."""
+"""Package lvgrid_rl.core."""

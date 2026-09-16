@@ -1,22 +1,20 @@
-"""Die sieben Invarianten des Erweiterbarkeits-Contracts (Abschnitt 13).
+"""The seven invariants of the extensibility contract (section 13).
 
-**Warum diese Datei existiert.** Entscheidung D10 verschiebt die
-Zertifizierung auf M7b, verlangt aber, dass die Architektur sie spaeter
-aufnehmen kann. Diese Zusage ist nur belastbar, wenn sie geprueft wird:
-Modularitaetsversprechen verfallen still. Sechs Monate ohne Test, und
-irgendeine sinnvolle Abkuerzung hat die Erweiterbarkeit aufgebraucht, ohne dass
-es jemand gemerkt haette.
+**Why this file exists.** Decision D10 defers certification to M7b but requires
+that the architecture can still take it later. That promise is only credible if
+it is checked: promises of modularity decay silently. Six months without a test
+and some reasonable shortcut has used up the extensibility without anyone
+noticing.
 
-**Warum ``xfail(strict=True)`` und keine rot fehlschlagenden Platzhalter.**
-Eine dauerhaft rote CI wird nach zwei Wochen ignoriert; damit waere der Zweck
-verfehlt. ``strict=True`` dreht die Logik um: der Test *darf* nicht bestehen,
-solange die Komponente fehlt. Sobald sie implementiert ist und der Test
-unerwartet gruen wird, **bricht der Build** und erzwingt, den Marker zu
-entfernen. Die Anzahl der XFAIL-Meldungen ist damit der Schuldenstand des
-Contracts, ablesbar in jedem CI-Lauf.
+**Why ``xfail(strict=True)`` and not failing placeholders.** A permanently red CI
+is ignored after two weeks, which would defeat the purpose. ``strict=True``
+inverts the logic: the test *must not* pass while the component is missing. As
+soon as it exists and the test turns green unexpectedly, **the build breaks** and
+forces the marker to be removed. The number of XFAIL reports is therefore the
+contract's debt count, readable in every CI run.
 
-Stand: I3 und I6 sind erfuellt (I6 seit dem SimBench-Adapter in M1), I5 wird in
-M2 faellig, I1, I4 und I7 in M3, I2 in M4.
+Status: I3, I5 and I6 are satisfied (I6 since the SimBench adapter in M1, I5
+since the power flow engine in M2). I1, I4 and I7 fall due in M3, I2 in M4.
 """
 
 from __future__ import annotations
@@ -40,7 +38,7 @@ pytestmark = pytest.mark.invariant
 
 
 def _module_available(name: str) -> bool:
-    """Existiert ein Modul, das eine noch offene Invariante erfuellen wuerde?"""
+    """Does a module exist that would satisfy a still-open invariant?"""
     try:
         importlib.import_module(name)
     except ModuleNotFoundError:
@@ -49,84 +47,84 @@ def _module_available(name: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# I1 -- SystemState vollstaendig und von Observation getrennt
+# I1 -- SystemState complete and separate from Observation
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.xfail(
     not _module_available("lvgrid_rl.env.obs"),
     strict=True,
-    reason="I1 wird mit dem ObservationBuilder in M3 faellig.",
+    reason="I1 falls due with the ObservationBuilder in M3.",
 )
 def test_i1_observation_is_a_pure_projection_of_system_state() -> None:
-    """I1: Der ``ObservationBuilder`` liest ausschliesslich aus ``SystemState``.
+    """I1: the ``ObservationBuilder`` reads only from ``SystemState``.
 
-    Der Zertifizierer braucht den vollen Zustand, der Agent darf weniger sehen.
-    Sind Beobachtung und Zustand dasselbe Objekt, ist das nicht trennbar, und
-    die Nachruestung betrifft jede Env-Komponente.
+    The certifier needs the full state, the agent may see less. If observation
+    and state are the same object that cannot be separated, and retrofitting
+    touches every environment component.
 
-    Pruefkriterien fuer M3:
+    Acceptance criteria for M3:
 
-    * ``Observation`` hat keine Setter und keinen eigenen Zustand;
-    * zwei ``ObservationBuilder`` mit unterschiedlicher ``sensor_config``
-      liefern aus demselben ``SystemState`` unterschiedliche Beobachtungen;
-    * der Builder haelt zwischen Aufrufen keinen Zustand, der nicht aus
-      ``SystemState`` rekonstruierbar ist.
+    * ``Observation`` has no setters and no state of its own;
+    * two ``ObservationBuilder`` instances with different ``sensor_config``
+      produce different observations from the same ``SystemState``;
+    * the builder holds no state between calls that is not reconstructible from
+      ``SystemState``.
     """
     from lvgrid_rl.env.obs import ObservationBuilder  # noqa: PLC0415
 
-    raise AssertionError(f"Pruefung fuer {ObservationBuilder} ausstehend")
+    raise AssertionError(f"assertions for {ObservationBuilder} still to be written")
 
 
 def test_i1_system_state_is_the_single_source_of_truth_today() -> None:
-    """I1, bereits pruefbarer Teil: ``SystemState`` ist vollstaendig.
+    """I1, the part already testable: ``SystemState`` is complete.
 
-    Er enthaelt Netz-, Anlagen-, exogenen und PQ-Zustand.
+    It holds grid, asset, exogenous and PQ state.
     """
     names = {f.name for f in dataclasses.fields(SystemState)}
     assert {"grid", "assets", "exogenous", "pq", "topology_id"} <= names
 
 
 # ---------------------------------------------------------------------------
-# I2 -- Anlagendynamik als reine Funktion
+# I2 -- asset dynamics as pure functions
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.xfail(
     not _module_available("lvgrid_rl.components.bess"),
     strict=True,
-    reason="I2 wird mit den Anlagenmodellen in M4 faellig.",
+    reason="I2 falls due with the asset models in M4.",
 )
 def test_i2_asset_dynamics_are_pure_functions() -> None:
-    """I2: ``dynamics`` ist determiniert und seiteneffektfrei.
+    """I2: ``dynamics`` is deterministic and free of side effects.
 
-    Der praediktive Sicherheitsfilter muss Anlagenzustaende ueber einen
-    Horizont hypothetisch fortschreiben. Nachruestung bedeutet Neuschreiben
-    aller Anlagenmodelle -- die teuerste der sieben Invarianten.
+    The predictive safety filter has to roll asset states forward
+    hypothetically over a horizon. Retrofitting means rewriting every asset
+    model -- the most expensive of the seven invariants.
 
-    Pruefkriterien fuer M4, je Anlagentyp:
+    Acceptance criteria for M4, per asset type:
 
-    * zweimaliger Aufruf mit identischer Eingabe liefert identische Ausgabe;
-    * die uebergebenen ``AssetState``-, ``Setpoint``- und
-      ``ExogenousInput``-Objekte sind nach dem Aufruf unveraendert;
-    * eine Kette von N Aufrufen liefert dasselbe Ergebnis wie N Einzelaufrufe
-      mit weitergegebenem Zustand.
+    * calling twice with identical input yields identical output;
+    * the ``AssetState``, ``Setpoint`` and ``ExogenousInput`` objects passed in
+      are unchanged after the call;
+    * a chain of N calls yields the same result as N individual calls with the
+      state handed on.
     """
     from lvgrid_rl.components.bess import BatteryStorage  # noqa: PLC0415
 
-    raise AssertionError(f"Pruefung fuer {BatteryStorage} ausstehend")
+    raise AssertionError(f"assertions for {BatteryStorage} still to be written")
 
 
 # ---------------------------------------------------------------------------
-# I3 -- Informationsordnung
+# I3 -- information ordering
 # ---------------------------------------------------------------------------
 
 
 def test_i3_decision_scope_blocks_access_to_future_realisations() -> None:
-    """I3: Zugriffe hinter den Entscheidungszeitpunkt werden unterbunden.
+    """I3: access beyond the decision point is blocked.
 
-    Der Mechanismus ist in M0 vollstaendig vorhanden. Eine Garantie auf Basis
-    von Information, die der reale Regler nicht hat, ist keine.
+    The mechanism is complete since M0. A guarantee based on information the
+    real controller does not have is not a guarantee.
     """
     with DecisionScope(t_decision=100):
         assert_readable(100)
@@ -136,63 +134,62 @@ def test_i3_decision_scope_blocks_access_to_future_realisations() -> None:
 
 
 def test_i3_information_set_cannot_express_clairvoyance() -> None:
-    """I3: strukturelle Absicherung gegen Hellsichtigkeit.
+    """I3: structural safeguard against clairvoyance.
 
-    Es gibt kein Feld fuer realisierte Werte des kommenden Intervalls.
+    There is no field for realised values of the coming interval.
     """
     names = {f.name for f in dataclasses.fields(InformationSet)}
     forbidden = {n for n in names if "realiz" in n or "realis" in n}
-    assert not forbidden, f"Hellsichtigkeit ausdrueckbar ueber: {forbidden}"
+    assert not forbidden, f"clairvoyance expressible via: {forbidden}"
 
 
 @pytest.mark.xfail(
     not _module_available("lvgrid_rl.env.lv_grid_env"),
     strict=True,
-    reason="I3 fuer die Env wird in M3 faellig.",
+    reason="I3 for the environment falls due in M3.",
 )
 def test_i3_env_wraps_action_construction_in_a_decision_scope() -> None:
-    """I3: die Environment nutzt den Mechanismus auch tatsaechlich.
+    """I3: the environment actually uses the mechanism.
 
-    Pruefkriterium fuer M3: ein Spion-Szenario, dessen Zugriffe protokolliert
-    werden, darf waehrend Schritt 1 und 2 des Ablaufs keinen Zeitpunkt nach
-    ``t`` sehen.
+    Acceptance criterion for M3: a spy scenario recording its accesses must not
+    see any time step after ``t`` during steps 1 and 2 of the step sequence.
     """
     from lvgrid_rl.env.lv_grid_env import LVGridEnv  # noqa: PLC0415
 
-    raise AssertionError(f"Pruefung fuer {LVGridEnv} ausstehend")
+    raise AssertionError(f"assertions for {LVGridEnv} still to be written")
 
 
 # ---------------------------------------------------------------------------
-# I4 -- Physikalische Aktionen, affine Normierung
+# I4 -- physical actions, affine normalisation
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.xfail(
     not _module_available("lvgrid_rl.env.actions"),
     strict=True,
-    reason="I4 wird mit dem ActionMapper in M3 faellig.",
+    reason="I4 falls due with the ActionMapper in M3.",
 )
 def test_i4_action_normalisation_is_affine_and_invertible() -> None:
-    """I4: Normierung ist affin und invertierbar, Begrenzung wird gemeldet.
+    """I4: normalisation is affine and invertible, clipping is reported.
 
-    Die zertifizierte Zulaessigkeitsmenge ist in Einspeisungen formuliert;
-    eine Projektion darauf braucht boxfoermige Aktionskoordinaten. Semantiken
-    wie "SoC-Zielwert" verletzen das.
+    The certified feasible set is formulated in injections; projecting onto it
+    needs box-shaped action coordinates. Semantics such as "state-of-charge
+    target" break that.
 
-    Pruefkriterien fuer M3:
+    Acceptance criteria for M3:
 
-    * ``from_normalised(to_normalised(a)) == a`` fuer Zufallsaktionen;
-    * Linearitaet: die Abbildung erhaelt Konvexkombinationen;
-    * kein Anlagenmodell begrenzt still -- jede Begrenzung erscheint in
+    * ``from_normalised(to_normalised(a)) == a`` for random actions;
+    * linearity: the mapping preserves convex combinations;
+    * no asset model clips silently -- every limitation appears in
       ``Setpoint.clipping_info``.
     """
     from lvgrid_rl.env.actions import ActionMapper  # noqa: PLC0415
 
-    raise AssertionError(f"Pruefung fuer {ActionMapper} ausstehend")
+    raise AssertionError(f"assertions for {ActionMapper} still to be written")
 
 
 # ---------------------------------------------------------------------------
-# I5 -- Hypothetischer Lastfluss ohne Seiteneffekt
+# I5 -- hypothetical power flow without side effects
 # ---------------------------------------------------------------------------
 
 
@@ -244,16 +241,15 @@ def test_i5_hypothetical_powerflow_leaves_the_live_grid_untouched() -> None:
 
 
 # ---------------------------------------------------------------------------
-# I6 -- Exogene Eingaenge tragen Schranken
+# I6 -- exogenous inputs carry bounds
 # ---------------------------------------------------------------------------
 
 
 def test_i6_exogenous_input_cannot_be_built_without_bounds() -> None:
-    """I6: kein Datenpfad kann exogene Eingaenge ohne Schranken erzeugen.
+    """I6: no data path can produce exogenous inputs without bounds.
 
-    In M0 auf Schemaebene erfuellt: ``bounds_mw`` ist ein Pflichtfeld mit
-    Formpruefung. Unsicherheitsmengen spaeter nachzuruesten waere ein Eingriff
-    in jeden Datenpfad.
+    Satisfied at schema level since M0: ``bounds_mw`` is mandatory and shape
+    checked. Retrofitting uncertainty sets later would touch every data path.
     """
     required = {
         f.name
@@ -274,56 +270,56 @@ def test_i6_exogenous_input_cannot_be_built_without_bounds() -> None:
 
 
 def test_i6_every_asset_from_the_adapter_has_complete_ratings() -> None:
-    """I6: jede Anlage traegt vollstaendige ``AssetRatings``.
+    """I6: every asset carries complete ``AssetRatings``.
 
-    Grundlage der deterministischen Unsicherheitsmengen (Abschnitt 6.9, P2).
-    Seit M1 erzeugt der SimBench-Adapter die Ratings; sie spaeter ueber alle
-    Szenarien nachzutragen waere reine Handarbeit gewesen.
+    Basis of the deterministic uncertainty sets (section 6.9, P2). Since M1 the
+    SimBench adapter produces the ratings; adding them later across all
+    scenarios would have been pure manual work.
     """
-    pytest.importorskip("simbench", reason="Extra 'sim' nicht installiert")
+    pytest.importorskip("simbench", reason="extra 'sim' not installed")
     from lvgrid_rl.data.sources.simbench import load_simbench  # noqa: PLC0415
 
     data = load_simbench("1-LV-rural1--2-sw")
-    assert data.assets, "Netz ohne Anlagen"
+    assert data.assets, "grid without assets"
     for asset in data.assets:
         r = asset.ratings
         assert r.p_min_mw <= r.p_max_mw
-        # Elemente mit Scheinleistungsangabe brauchen sie fuer die spaetere
-        # Q-Regelung und fuer das Apparatediagramm des Wechselrichters.
+        # Elements with an apparent power rating need it for the later reactive
+        # power control and for the inverter capability diagram.
         if asset.element_table in ("sgen", "storage"):
             assert r.s_max_mva is not None and r.s_max_mva > 0.0
 
 
 # ---------------------------------------------------------------------------
-# I7 -- Zwei Sicherheits-Eingriffspunkte mit Null-Implementierung
+# I7 -- two safety intervention points with a null implementation
 # ---------------------------------------------------------------------------
 
 
 def test_i7_null_safety_component_satisfies_the_protocol() -> None:
-    """I7: der Eingriffspunkt existiert ab M0 mit Null-Implementierung."""
+    """I7: the intervention point exists from M0 with a null implementation."""
     assert isinstance(NullSafetyComponent(), SafetyComponent)
 
 
 @pytest.mark.xfail(
     not _module_available("lvgrid_rl.env.lv_grid_env"),
     strict=True,
-    reason="I7 fuer die Env wird in M3 faellig.",
+    reason="I7 for the environment falls due in M3.",
 )
 def test_i7_env_exposes_both_intervention_points() -> None:
-    """I7: beide Eingriffspunkte liegen im Ablauf der Environment.
+    """I7: both intervention points sit in the environment's step sequence.
 
-    Der Shield sitzt innerhalb der Env, weil er den Zustand braucht; Masking
-    liegt ausserhalb und braucht die Verteilung. Beide Pfade muessen vorhanden
-    sein, sonst ist einer der Mechanismen spaeter nur mit Eingriff in den
-    Ablauf nachruestbar.
+    The shield lives inside the environment because it needs the state; masking
+    lives outside and needs the distribution. Both paths must exist, otherwise
+    one of the mechanisms can later only be added by cutting into the step
+    sequence.
 
-    Pruefkriterien fuer M3:
+    Acceptance criteria for M3:
 
-    * eine Dummy-``SafetyComponent``, die Aktionen halbiert, wirkt messbar auf
-      die geschriebenen Setpoints;
-    * ``info["action_mask"]`` ist in jedem Schritt vorhanden und erlaubt bei
-      ``safety.mechanism: none`` alle Aktionen.
+    * a dummy ``SafetyComponent`` that halves actions measurably changes the
+      setpoints written;
+    * ``info["action_mask"]`` is present at every step and permits all actions
+      when ``safety.mechanism: none``.
     """
     from lvgrid_rl.env.lv_grid_env import LVGridEnv  # noqa: PLC0415
 
-    raise AssertionError(f"Pruefung fuer {LVGridEnv} ausstehend")
+    raise AssertionError(f"assertions for {LVGridEnv} still to be written")
