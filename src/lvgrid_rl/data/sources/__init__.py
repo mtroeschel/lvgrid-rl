@@ -1,0 +1,1 @@
+"""Quellen-Adapter der Datenschicht."""

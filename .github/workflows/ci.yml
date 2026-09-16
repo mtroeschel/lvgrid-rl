@@ -41,7 +41,10 @@ jobs:
       # unbemerkt durchrutschen, und die CI rechnet nachweislich mit denselben
       # Versionen wie der Entwicklungsrechner.
       - name: Installieren
-        run: uv sync --locked
+        # --extra sim: ohne pandas/pandapower/simbench wuerden die Tests der
+        # Datenschicht stillschweigend uebersprungen und die CI waere gruen,
+        # ohne sie geprueft zu haben.
+        run: uv sync --locked --extra sim
 
       - name: Linting
         run: uv run ruff check src tests

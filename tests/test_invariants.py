@@ -15,8 +15,8 @@ unerwartet gruen wird, **bricht der Build** und erzwingt, den Marker zu
 entfernen. Die Anzahl der XFAIL-Meldungen ist damit der Schuldenstand des
 Contracts, ablesbar in jedem CI-Lauf.
 
-Reihenfolge der Faelligkeit: I6 und I3 sind in M0 erfuellt, I1 und I7 werden in
-M3 faellig, I4 in M3/M4, I2 in M4, I5 in M2.
+Stand: I3 und I6 sind erfuellt (I6 seit dem SimBench-Adapter in M1), I5 wird in
+M2 faellig, I1, I4 und I7 in M3, I2 in M4.
 """
 
 from __future__ import annotations
@@ -245,24 +245,25 @@ def test_i6_exogenous_input_cannot_be_built_without_bounds() -> None:
         )
 
 
-@pytest.mark.xfail(
-    not _module_available("lvgrid_rl.data.scenario_builder"),
-    strict=True,
-    reason="I6 fuer Anlagen-Ratings wird mit dem Szenario-Builder in M1 faellig.",
-)
-def test_i6_every_asset_in_a_scenario_has_complete_ratings() -> None:
-    """I6: jede Anlage traegt ``AssetRatings``.
+def test_i6_every_asset_from_the_adapter_has_complete_ratings() -> None:
+    """I6: jede Anlage traegt vollstaendige ``AssetRatings``.
 
-    Grundlage der deterministischen Unsicherheitsmengen. Die Ratings
-    nachzutragen ist reine Handarbeit ueber alle Szenarien.
-
-    Pruefkriterium fuer M1: fuer jedes erzeugte Szenario hat jede Anlage
-    ``p_min_mw`` und ``p_max_mw``; Anlagen mit Q-Faehigkeit zusaetzlich
-    ``s_max_mva``.
+    Grundlage der deterministischen Unsicherheitsmengen (Abschnitt 6.9, P2).
+    Seit M1 erzeugt der SimBench-Adapter die Ratings; sie spaeter ueber alle
+    Szenarien nachzutragen waere reine Handarbeit gewesen.
     """
-    from lvgrid_rl.data.scenario_builder import build_scenario  # noqa: PLC0415
+    pytest.importorskip("simbench", reason="Extra 'sim' nicht installiert")
+    from lvgrid_rl.data.sources.simbench import load_simbench  # noqa: PLC0415
 
-    raise AssertionError(f"Pruefung fuer {build_scenario} ausstehend")
+    data = load_simbench("1-LV-rural1--2-sw")
+    assert data.assets, "Netz ohne Anlagen"
+    for asset in data.assets:
+        r = asset.ratings
+        assert r.p_min_mw <= r.p_max_mw
+        # Elemente mit Scheinleistungsangabe brauchen sie fuer die spaetere
+        # Q-Regelung und fuer das Apparatediagramm des Wechselrichters.
+        if asset.element_table in ("sgen", "storage"):
+            assert r.s_max_mva is not None and r.s_max_mva > 0.0
 
 
 # ---------------------------------------------------------------------------
