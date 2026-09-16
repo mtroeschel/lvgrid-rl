@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+.venv/
+# Ergebnisse und Datencaches werden nicht versioniert. Reproduzierbarkeit laeuft
+# ueber Konfiguration, Seeds und Datenmanifest, nicht ueber eingecheckte Artefakte.
+results/
+data/cache/
+data/raw/
