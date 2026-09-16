@@ -1,9 +1,9 @@
 # Hydra-Root. Die Gruppen sind ab M0 vorhanden, aber bis auf grid/env noch leer;
 # das haelt die Konfigurationsstruktur stabil, waehrend die Module entstehen.
 defaults:
-  - grid: simbench_1-LV-rural1
+  - grid: simbench_1-LV-rural1-future
   - data: default
-  - scenario: null
+  - scenario: moderate_growth
   - env: default
   - agent: null
   - baseline: null

@@ -196,23 +196,51 @@ def test_i4_action_normalisation_is_affine_and_invertible() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    not _module_available("lvgrid_rl.grid.powerflow"),
-    strict=True,
-    reason="I5 wird mit der PowerFlowEngine in M2 faellig.",
-)
 def test_i5_hypothetical_powerflow_leaves_the_live_grid_untouched() -> None:
-    """I5: ``run_hypothetical`` veraendert das laufende Netz nicht.
+    """I5: ``run_hypothetical`` does not alter the running grid.
 
-    Rueckfalltrajektorien und Falsifikationssuche brauchen genau das.
+    Backup trajectories of a predictive safety filter and the falsification
+    search of the verification step need exactly this. Satisfied since the
+    power flow engine landed in M2.
 
-    Pruefkriterium fuer M2: Snapshot aller veraenderlichen Tabellen des
-    pandapower-Netzes vor und nach dem hypothetischen Aufruf; die Snapshots
-    muessen bitidentisch sein, einschliesslich ``net.res_*``.
+    Checked here on every mutable element table plus all ``net.res_*`` result
+    tables, because pandapower writes more of them than one tends to remember.
     """
+    pytest.importorskip("simbench", reason="extra 'sim' not installed")
+    from lvgrid_rl.core.protocols import Setpoint  # noqa: PLC0415
+    from lvgrid_rl.grid.loader import load_grid  # noqa: PLC0415
     from lvgrid_rl.grid.powerflow import PandapowerEngine  # noqa: PLC0415
 
-    raise AssertionError(f"Pruefung fuer {PandapowerEngine} ausstehend")
+    model = load_grid("1-LV-rural1--2-sw")
+    engine = PandapowerEngine(model)
+
+    live = {f"load:{i}": Setpoint(f"load:{i}", 0.002) for i in model.net.load.index}
+    engine.run(live, 0)
+
+    def snapshot() -> dict[str, np.ndarray]:
+        out: dict[str, np.ndarray] = {}
+        for table in ("load", "sgen", "storage"):
+            for column in ("p_mw", "q_mvar", "in_service"):
+                df = model.net[table]
+                if len(df) and column in df.columns:
+                    out[f"{table}.{column}"] = df[column].to_numpy(copy=True)
+        for key in (k for k in model.net.keys() if k.startswith("res_")):
+            df = model.net[key]
+            if hasattr(df, "to_numpy") and len(df):
+                out[key] = df.to_numpy(copy=True)
+        return out
+
+    before = snapshot()
+    other = {f"load:{i}": Setpoint(f"load:{i}", 0.009) for i in model.net.load.index}
+    hypothetical = engine.run_hypothetical(other, 1)
+    after = snapshot()
+
+    assert hypothetical.converged, "the hypothetical run must actually compute"
+    assert before.keys() == after.keys()
+    for key in before:
+        assert np.array_equal(before[key], after[key], equal_nan=True), (
+            f"run_hypothetical modified {key}"
+        )
 
 
 # ---------------------------------------------------------------------------
