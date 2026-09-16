@@ -1,1 +1,1 @@
-"""Paket lvgrid_rl.baselines (ab M1 ff.)."""
+"""Package lvgrid_rl.baselines."""

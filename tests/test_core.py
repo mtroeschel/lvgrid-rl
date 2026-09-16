@@ -1,7 +1,7 @@
-"""Tests der Kernschemata, des Einheitenkanons und der Reproduzierbarkeit.
+"""Tests of the core schemas, the unit convention and reproducibility.
 
-Diese Tests pruefen, was in M0 bereits existiert. Die Invarianten des
-Erweiterbarkeits-Contracts stehen in ``test_invariants.py``.
+These cover what already exists in M0. The invariants of the extensibility
+contract live in ``test_invariants.py``.
 """
 
 from __future__ import annotations
@@ -41,12 +41,12 @@ from lvgrid_rl.experiment.reproducibility import (
 )
 
 # ---------------------------------------------------------------------------
-# Hilfsmittel
+# Helpers
 # ---------------------------------------------------------------------------
 
 
 def make_exogenous(n: int = 2, t_index: int = 0) -> ExogenousInput:
-    """Minimaler, gueltiger exogener Eingang."""
+    """Minimal valid exogenous input."""
     realized = np.array([0.003, -0.004][:n], dtype=float)
     bounds = np.vstack([realized - 0.001, realized + 0.001])
     return ExogenousInput(
@@ -72,7 +72,7 @@ def make_grid_state(n_bus: int = 3) -> GridState:
 
 
 # ---------------------------------------------------------------------------
-# Einheitenkanon
+# Unit convention
 # ---------------------------------------------------------------------------
 
 SCHEMA_TYPES = [
@@ -88,9 +88,9 @@ SCHEMA_TYPES = [
     ActionSpec,
 ]
 
-# Felder ohne physikalische Einheit: Indizes, Namen, Flags, verschachtelte
-# Schemata. Bewusst als explizite Liste, damit ein neues Feld ohne Einheit eine
-# Entscheidung erzwingt und nicht durch eine Heuristik durchrutscht.
+# Fields without a physical unit: indices, names, flags, nested schemas.
+# Deliberately an explicit list, so that a new field without a unit forces a
+# decision rather than slipping through a heuristic.
 UNITLESS_FIELDS = {
     "t_index",
     "timestamp",
@@ -117,11 +117,10 @@ UNITLESS_FIELDS = {
 
 @pytest.mark.parametrize("cls", SCHEMA_TYPES, ids=lambda c: c.__name__)
 def test_numeric_schema_fields_carry_a_unit_suffix(cls: type) -> None:
-    """Jedes numerische Schemafeld traegt ein bekanntes Einheiten-Suffix.
+    """Every numeric schema field carries a known unit suffix.
 
-    Umsetzung des Einheitenkanons (Abschnitt 13). Verhindert genau die Klasse
-    von Fehlern, die spaeter in Intervallrechnungen stillschweigend falsche
-    Ergebnisse liefert.
+    Implements the unit convention (section 13). Prevents exactly the class of
+    mistake that later makes interval arithmetic quietly wrong.
     """
     offenders = [
         f.name
@@ -129,32 +128,32 @@ def test_numeric_schema_fields_carry_a_unit_suffix(cls: type) -> None:
         if f.name not in UNITLESS_FIELDS and unit_of(f.name) is None
     ]
     assert not offenders, (
-        f"{cls.__name__}: Felder ohne Einheiten-Suffix: {offenders}. "
-        f"Erlaubte Suffixe: {sorted(UNIT_SUFFIXES)}"
+        f"{cls.__name__}: fields without a unit suffix: {offenders}. "
+        f"Permitted suffixes: {sorted(UNIT_SUFFIXES)}"
     )
 
 
 def test_unit_of_prefers_the_longest_suffix() -> None:
-    """``_mwh`` darf nicht als ``_mw`` gelesen werden."""
+    """``_mwh`` must not be read as ``_mw``."""
     assert unit_of("energy_mwh") == "_mwh"
     assert unit_of("p_slack_mw") == "_mw"
     assert unit_of("etwas_ohne_einheit") is None
 
 
 # ---------------------------------------------------------------------------
-# Unveraenderlichkeit
+# Immutability
 # ---------------------------------------------------------------------------
 
 
 def test_frozen_arrays_are_not_writeable() -> None:
-    """``frozen=True`` schuetzt die Referenz, nicht den Arrayinhalt."""
+    """``frozen=True`` protects the reference, not the array contents."""
     state = make_grid_state()
     with pytest.raises(ValueError):
         state.vm_pu[0] = 42.0
 
 
 def test_freeze_array_does_not_copy() -> None:
-    """Der heisse Pfad soll keine Kopie je Zeitschritt erzeugen."""
+    """The hot path must not create a copy per time step."""
     base = np.array([1.0, 2.0])
     view = freeze_array(base)
     assert view.base is base
@@ -167,7 +166,7 @@ def test_schema_instances_reject_attribute_assignment() -> None:
 
 
 # ---------------------------------------------------------------------------
-# ExogenousInput: Schranken sind Pflicht (Invariante I6, Schemaebene)
+# ExogenousInput: bounds are mandatory (invariant I6, schema level)
 # ---------------------------------------------------------------------------
 
 
@@ -184,9 +183,9 @@ def test_exogenous_input_requires_matching_bounds() -> None:
 
 
 def test_exogenous_input_rejects_realisation_outside_bounds() -> None:
-    """Realisierungen ausserhalb der Schranken sind ein Fehler.
+    """Realisations outside the bounds are an error.
 
-    Sie wuerden jede spaetere Sicherheitsaussage auf ihrer Basis entwerten.
+    They would void every later safety statement resting on them.
     """
     with pytest.raises(ValueError, match="outside the bounds"):
         ExogenousInput(
@@ -206,7 +205,7 @@ def test_bound_of_returns_the_series_interval() -> None:
 
 
 def test_asset_ratings_expose_bounds_for_uncertainty_sets() -> None:
-    """PV im Verbraucher-Zaehlpfeil: Einspeisung ist negativ."""
+    """PV in the consumer sign convention: infeed is negative."""
     pv = AssetRatings(p_min_mw=-0.01, p_max_mw=0.0, s_max_mva=0.011)
     assert pv.p_bounds == Interval(-0.01, 0.0)
     with pytest.raises(ValueError):
@@ -214,19 +213,19 @@ def test_asset_ratings_expose_bounds_for_uncertainty_sets() -> None:
 
 
 # ---------------------------------------------------------------------------
-# EN-50160-Budget
+# EN 50160 budget
 # ---------------------------------------------------------------------------
 
 
 def test_k95_budget_is_fifty_windows_per_week() -> None:
-    """1008 Zehn-Minuten-Fenster je Woche, 5 Prozent davon sind 50."""
+    """1008 ten-minute windows per week; five percent of them is 50."""
     pq = PQBudgetState(windows_elapsed_count=0)
     assert pq.windows_total_count == 7 * 24 * 6 == 1008
     assert pq.budget_windows_count == 50
 
 
 def test_budget_utilisation_can_exceed_one() -> None:
-    """Ueberschreitung muss darstellbar sein, sonst ist die Kennzahl blind."""
+    """Exceedance must be representable, otherwise the metric is blind."""
     pq = PQBudgetState(
         windows_elapsed_count=600,
         violations_k95_count=np.array([0, 25, 75], dtype=np.int32),
@@ -249,7 +248,7 @@ def test_open_window_mean_is_nan_when_empty() -> None:
 
 
 def test_system_state_requires_timezone_aware_timestamp() -> None:
-    """Naive Zeitstempel erzeugen bei Sommerzeitwechseln stille Fehler."""
+    """Naive timestamps cause silent errors at daylight saving transitions."""
     with pytest.raises(ValueError, match="UTC"):
         SystemState(
             t_index=0,
@@ -276,7 +275,7 @@ def test_system_state_accepts_utc() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Informationsordnung (Invariante I3, Mechanismus-Ebene)
+# Information ordering (invariant I3, mechanism level)
 # ---------------------------------------------------------------------------
 
 
@@ -294,13 +293,13 @@ def test_access_up_to_decision_horizon_is_allowed() -> None:
 
 
 def test_no_restriction_outside_a_decision_scope() -> None:
-    """Simulation, Auswertung und Zertifizierung duerfen den Vollzustand sehen."""
+    """Simulation, evaluation and certification may see the full state."""
     assert_readable(10_000)
     assert information.current_decision_horizon() is None
 
 
 def test_unrestricted_lifts_the_restriction_for_privileged_components() -> None:
-    """Fuer ``mpc_oracle`` mit perfekter Vorausschau, explizit benannt."""
+    """For ``mpc_oracle`` with perfect foresight, explicitly named."""
     with DecisionScope(t_decision=10):
         with unrestricted():
             assert_readable(50)
@@ -316,7 +315,7 @@ def test_decision_scopes_restore_the_previous_horizon() -> None:
 
 
 def test_information_set_has_no_field_for_realised_future_values() -> None:
-    """Strukturelle Absicherung: Hellsichtigkeit soll nicht ausdrueckbar sein."""
+    """Structural safeguard: clairvoyance must not be expressible."""
     names = {f.name for f in dataclasses.fields(InformationSet)}
     assert not any("realiz" in n or "realis" in n for n in names), names
     assert "exogenous_bounds_mw" in names
@@ -325,7 +324,7 @@ def test_information_set_has_no_field_for_realised_future_values() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Sicherheits-Eingriffspunkte (Invariante I7, Null-Implementierung)
+# Safety intervention points (invariant I7, null implementation)
 # ---------------------------------------------------------------------------
 
 
@@ -339,10 +338,9 @@ def test_null_safety_component_passes_actions_through() -> None:
 
 
 def test_verdict_has_no_unsafe_value() -> None:
-    """Es gibt kein ``UNSAFE``, und das ist Absicht.
+    """There is no ``UNSAFE``, and that is deliberate.
 
-    Ein Zertifizierer darf konservativ sein, aber nie optimistisch
-    (Abschnitt 6.9).
+    A certifier may be conservative but never optimistic (section 6.9).
     """
     assert {v.name for v in Verdict} == {"CERTIFIED_SAFE", "NOT_CERTIFIED"}
 
@@ -360,7 +358,7 @@ def test_action_spec_rejects_inconsistent_definitions() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Reproduzierbarkeit
+# Reproducibility
 # ---------------------------------------------------------------------------
 
 
@@ -368,7 +366,7 @@ def test_seed_derivation_is_deterministic_and_purpose_separated() -> None:
     a, b = SeedSet.from_base(42), SeedSet.from_base(42)
     assert a == b
     values = {a.scenario, a.episode, a.train, a.eval, a.forecast}
-    assert len(values) == 5, "Zweck-Seeds muessen sich unterscheiden"
+    assert len(values) == 5, "purpose seeds must differ"
 
 
 def test_different_base_seeds_give_different_scenario_seeds() -> None:
@@ -376,8 +374,8 @@ def test_different_base_seeds_give_different_scenario_seeds() -> None:
 
 
 def test_generator_rejects_unknown_purposes() -> None:
-    """Tippfehler sollen auffallen, nicht stillschweigend einen Stream liefern."""
-    with pytest.raises(KeyError, match="Unbekannter Seed-Zweck"):
+    """Typos should surface rather than silently yield a stream."""
+    with pytest.raises(KeyError, match="Unknown seed purpose"):
         SeedSet.from_base(0).generator("trian")
 
 

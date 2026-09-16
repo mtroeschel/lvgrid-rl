@@ -1,16 +1,16 @@
-# Macht das Repository zitierbar. GitHub liest die Datei und bietet
-# "Cite this repository" an; Zenodo uebernimmt die Metadaten beim Archivieren.
-# TODO: Name, ORCID und Affiliation ergaenzen.
+# Makes the repository citable. GitHub reads this file and offers
+# "Cite this repository"; Zenodo picks up the metadata when archiving.
+# TODO: fill in name, ORCID and affiliation.
 cff-version: 1.2.0
-message: "Wenn Sie diese Software verwenden, zitieren Sie sie bitte wie folgt."
-title: "lvgrid-rl: Trainingsumgebung für RL-Agenten zur Regelung von Niederspannungsnetzen"
+message: "If you use this software, please cite it as below."
+title: "lvgrid-rl: a training environment for RL agents controlling low-voltage grids"
 abstract: >-
-  Modulare Trainings- und Evaluationsumgebung für Reinforcement-Learning-Agenten,
-  die Spannungsbandverletzungen nach EN 50160 sowie Leitungs- und
-  Transformatorüberlastungen in Niederspannungsnetzen autonom ausregeln, durch
-  Abregelung von PV-Einspeisung, Verschiebung von Wärmepumpen- und Ladelasten
-  und Steuerung von Batteriespeichern. Netzsimulation mit pandapower und
-  SimBench, Agenten mit Stable-Baselines3.
+  Modular training and evaluation environment for reinforcement learning agents
+  that autonomously resolve EN 50160 voltage band violations as well as line and
+  transformer overloads in low-voltage distribution grids, by curtailing PV
+  infeed, shifting heat pump and charging loads, and controlling battery
+  storage. Grid simulation with pandapower and SimBench, agents with
+  Stable-Baselines3.
 type: software
 license: MIT
 repository-code: "https://github.com/mtroeschel/lvgrid-rl"

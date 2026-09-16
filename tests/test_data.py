@@ -1,8 +1,8 @@
-"""Tests der Datenschicht (M1).
+"""Tests of the data layer (M1).
 
-Die Tests, die echte SimBench-Daten brauchen, werden uebersprungen, wenn das
-optionale Extra ``sim`` nicht installiert ist. Die CI installiert es, damit
-diese Schicht dort tatsaechlich geprueft wird.
+Tests that need real SimBench data are skipped when the optional ``sim`` extra
+is not installed. CI installs it, so that this layer is actually exercised
+there.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from lvgrid_rl.data.sources.simbench import (
     AssetCategory,
     categorize,
     ev_rated_power_kw,
+    split_pq,
 )
 from lvgrid_rl.data.timebase import (
     ALLOWED_SIM_DT_MIN,
@@ -25,21 +26,21 @@ from lvgrid_rl.data.timebase import (
     to_utc_index,
 )
 
-simbench = pytest.importorskip("simbench", reason="Extra 'sim' nicht installiert")
+simbench = pytest.importorskip("simbench", reason="extra 'sim' not installed")
 
 SIMBENCH_CODE = "1-LV-rural1--2-sw"
 
 
 @pytest.fixture(scope="module")
 def simbench_data():
-    """Aufbereitetes SimBench-Netz, einmal je Testmodul geladen."""
+    """Prepared SimBench grid, loaded once per test module."""
     from lvgrid_rl.data.sources.simbench import load_simbench
 
     return load_simbench(SIMBENCH_CODE)
 
 
 # ---------------------------------------------------------------------------
-# Zeitbasis
+# Time base
 # ---------------------------------------------------------------------------
 
 
@@ -50,42 +51,42 @@ def test_allowed_step_sizes_divide_the_pq_window(dt: int) -> None:
 
 
 def test_fifteen_minutes_is_rejected() -> None:
-    """15 teilt 10 nicht -- ausgerechnet die SimBench-Originalaufloesung."""
+    """15 does not divide 10 -- the native SimBench resolution, of all things."""
     with pytest.raises(ValueError, match="EN 50160"):
         TimeBase(sim_dt_min=15, control_dt_min=15)
 
 
 def test_control_step_must_be_a_multiple_of_the_simulation_step() -> None:
-    with pytest.raises(ValueError, match="Vielfaches"):
+    with pytest.raises(ValueError, match="multiple"):
         TimeBase(sim_dt_min=5, control_dt_min=7)
 
 
 def test_control_step_may_be_offset_against_the_pq_grid() -> None:
-    """15-min-Regeltakt auf 5-min-Physik ist zulaessig und realistisch."""
+    """A 15-minute control cycle on 5-minute physics is valid and realistic."""
     tb = TimeBase(sim_dt_min=5, control_dt_min=15)
     assert tb.sim_steps_per_control_step == 3
     assert tb.control_steps_per_week == 672
 
 
 def test_suggested_gamma_covers_the_weekly_horizon() -> None:
-    """Gamma ist aus dem Kriterienhorizont abgeleitet, kein freier Parameter."""
+    """Gamma is derived from the criterion horizon, not a free parameter."""
     tb = TimeBase(sim_dt_min=5, control_dt_min=15)
     effective_horizon = 1.0 / (1.0 - tb.suggested_gamma())
     assert effective_horizon == pytest.approx(tb.control_steps_per_week)
 
 
 def test_dst_transition_is_resolved_into_a_regular_utc_index() -> None:
-    """Der Kern der Zeitzonenbehandlung, an synthetischen Daten.
+    """The core of the time zone handling, on synthetic data.
 
-    Am 30.10.2016 wiederholt sich in deutscher Ortszeit die Stunde 02:00.
-    Naiv eingelesen ist der Index nicht eindeutig; nach der Konversion muss er
-    streng monoton und lueckenlos sein.
+    On 2016-10-30 the hour 02:00 repeats in German local time. Read naively the
+    index is not unique; after conversion it must be strictly monotonic and
+    gapless.
     """
     repeated = pd.date_range("2016-10-30 02:00", "2016-10-30 02:45", freq="15min")
-    # Reihenfolge wie in der Quelldatei: erst der Block in Sommerzeit, dann
-    # derselbe Block in Normalzeit. ``ambiguous="infer"`` braucht genau diese
-    # zusammenhaengende Abfolge -- ein naiv sortierter Index, der die beiden
-    # Bloecke verschraenkt, ist nicht aufloesbar.
+    # Ordering as in the source file: first the block in summer time, then the
+    # same block in standard time. ``ambiguous="infer"`` needs exactly this
+    # contiguous sequence -- a naively sorted index that interleaves the two
+    # blocks cannot be resolved.
     doubled = pd.DatetimeIndex(
         list(pd.date_range("2016-10-30 00:00", "2016-10-30 01:45", freq="15min"))
         + list(repeated)
@@ -117,7 +118,7 @@ def _power_series(freq: str = "15min", n: int = 96) -> pd.Series:
 
 
 def test_upsampling_power_conserves_energy_exactly() -> None:
-    """Stueckweise konstant erhaelt die Energie des Quellintervalls."""
+    """Piecewise constant preserves the energy of the source interval."""
     s = _power_series()
     up = resample_series(s, pd.Timedelta("5min"), Policy.MEAN)
     assert len(up) == 3 * len(s)
@@ -132,7 +133,7 @@ def test_downsampling_power_conserves_energy_exactly() -> None:
 
 
 def test_upsampling_covers_the_full_last_source_interval() -> None:
-    """Sonst fehlt am Jahresende ein Teilintervall."""
+    """Otherwise a partial interval is missing at the end of the year."""
     s = _power_series(n=4)
     up = resample_series(s, pd.Timedelta("5min"), Policy.MEAN)
     assert up.index[-1] == s.index[-1] + pd.Timedelta("10min")
@@ -155,21 +156,21 @@ def test_majority_policy_keeps_availability_binary() -> None:
 
 
 def test_non_integer_step_ratio_is_rejected() -> None:
-    """Sonst waere die Umrechnung eine Interpolation mit Rasterversatz."""
+    """Otherwise the conversion would be an interpolation with a grid offset."""
     s = _power_series()
-    with pytest.raises(ValueError, match="Vielfaches"):
+    with pytest.raises(ValueError, match="multiple"):
         resample_series(s, pd.Timedelta("7min"), Policy.MEAN)
 
 
 def test_irregular_index_is_rejected_with_a_dst_hint() -> None:
     idx = pd.DatetimeIndex(["2016-06-01 00:00", "2016-06-01 00:15", "2016-06-01 01:00"])
     s = pd.Series([1.0, 2.0, 3.0], index=idx.tz_localize("UTC"))
-    with pytest.raises(ValueError, match="Sommerzeit"):
+    with pytest.raises(ValueError, match="daylight saving"):
         resample_series(s, pd.Timedelta("5min"), Policy.MEAN)
 
 
 # ---------------------------------------------------------------------------
-# SimBench-Adapter
+# SimBench adapter
 # ---------------------------------------------------------------------------
 
 
@@ -197,10 +198,10 @@ def test_ev_charger_rated_power_is_read_from_the_profile_name() -> None:
 
 
 def test_ev_chargers_are_not_controllable_yet() -> None:
-    """Ladepunkte sind vorerst unsteuerbar.
+    """Charge points are uncontrollable for now.
 
-    Aus einem festen Lastgang ist keine zulaessige Verschiebung ableitbar; das
-    Session-Modell kommt erst mit emobpy in M5.
+    No admissible shift can be derived from a fixed load curve; the session
+    model arrives with emobpy in M5.
     """
     assert not AssetCategory.EV_CHARGER.is_controllable
     assert AssetCategory.HEAT_PUMP.is_controllable
@@ -212,12 +213,12 @@ def test_simbench_profiles_form_a_regular_utc_year(simbench_data) -> None:
     idx = simbench_data.profiles.index
     assert idx.is_monotonic_increasing and idx.is_unique
     assert str(idx.tz) == "UTC"
-    assert len(idx) == 366 * 96, "2016 ist ein Schaltjahr, 15-min-Raster"
+    assert len(idx) == 366 * 96, "2016 is a leap year, 15-minute grid"
     assert set(pd.Series(idx).diff().dropna().unique()) == {pd.Timedelta("15min")}
 
 
 def test_scenario_two_contains_heat_pumps_and_chargers(simbench_data) -> None:
-    """Gegenprobe zur urspruenglichen Annahme, SimBench habe keine EV-Profile."""
+    """Counter-check to the original claim that SimBench has no EV profiles."""
     cats = {a.category for a in simbench_data.assets}
     assert AssetCategory.HEAT_PUMP in cats
     assert AssetCategory.EV_CHARGER in cats
@@ -225,7 +226,7 @@ def test_scenario_two_contains_heat_pumps_and_chargers(simbench_data) -> None:
 
 
 def test_ratings_follow_the_consumer_sign_convention(simbench_data) -> None:
-    """PV speist ein, kann nicht beziehen; Speicher koennen beides."""
+    """PV feeds in and cannot draw; storage can do both."""
     for asset in simbench_data.assets:
         r = asset.ratings
         if asset.element_table == "sgen":
@@ -237,7 +238,7 @@ def test_ratings_follow_the_consumer_sign_convention(simbench_data) -> None:
 
 
 def test_connection_points_include_generator_only_buses(simbench_data) -> None:
-    """Entscheidung D7: Erzeuger zaehlen, nicht nur Lasten."""
+    """Decision D7: generators count, not only loads."""
     load_buses = {a.bus for a in simbench_data.assets if a.element_table == "load"}
     all_buses = set(simbench_data.connection_point_buses)
     assert load_buses <= all_buses
@@ -262,7 +263,7 @@ def test_resampling_the_real_year_conserves_energy(simbench_data) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cache und Manifest
+# Cache and manifest
 # ---------------------------------------------------------------------------
 
 
@@ -279,7 +280,7 @@ def test_cache_key_is_stable_and_sensitive() -> None:
 
 
 def test_pipeline_version_is_part_of_the_key() -> None:
-    """Sonst bliebe eine korrigierte Regel auf altem Cache wirkungslos."""
+    """Otherwise a corrected rule would have no effect on a stale cache."""
     a = CacheKey("s", "1", "d", 5, pipeline_version="1")
     b = CacheKey("s", "1", "d", 5, pipeline_version="2")
     assert a.digest() != b.digest()
@@ -293,21 +294,21 @@ def test_cache_round_trip_preserves_content(tmp_path) -> None:
     manifest = cache.store(key, frame, notes="Test")
     assert cache.has(key)
     loaded, loaded_manifest = cache.load(key)
-    # check_freq=False: Parquet speichert das freq-Attribut des Index nicht.
+    # check_freq=False: Parquet does not store the index freq attribute.
     pd.testing.assert_frame_equal(frame, loaded, check_freq=False)
     assert loaded_manifest.content_hash == manifest.content_hash
     assert loaded_manifest.n_rows == 24
 
 
 def test_tampered_cache_entry_is_detected(tmp_path) -> None:
-    """Der Inhalts-Hash ist die Grundlage der Reproduzierbarkeitsaussage."""
+    """The content hash is the basis of the reproducibility statement."""
     cache = ProfileCache(tmp_path)
     key = CacheKey("simbench", "1.6.1", "testnetz", 5)
     cache.store(key, _small_frame())
     tampered = _small_frame()
     tampered.iloc[0, 0] = 999.0
     tampered.to_parquet(cache.path_for(key), compression="zstd")
-    with pytest.raises(ValueError, match="Inhalts-Hash"):
+    with pytest.raises(ValueError, match="Content hash"):
         cache.load(key)
 
 
@@ -322,3 +323,71 @@ def test_frame_hash_ignores_storage_details_but_not_content() -> None:
 def test_missing_cache_entry_raises(tmp_path) -> None:
     with pytest.raises(FileNotFoundError):
         ProfileCache(tmp_path).load(CacheKey("s", "1", "d", 5))
+
+
+# ---------------------------------------------------------------------------
+# Reactive power profiles
+# ---------------------------------------------------------------------------
+
+
+def test_reactive_profiles_are_carried_separately(simbench_data) -> None:
+    """Load profiles come as separate ``*_pload`` and ``*_qload`` series.
+
+    They are kept as their own column group because they need their own
+    resampling rule and because reference method B3 (Q(U) characteristic)
+    depends on them.
+    """
+    assert not simbench_data.q_profiles.empty
+    assert simbench_data.q_profiles.index.equals(simbench_data.profiles.index)
+    # Every reactive series has an active counterpart, but not the other way
+    # round: generators and storage carry no reactive profile in SimBench.
+    assert set(simbench_data.q_profiles.columns) <= set(simbench_data.profiles.columns)
+
+
+def test_reactive_profiles_may_be_negative(simbench_data) -> None:
+    """Capacitive behaviour is in the data and must not be assumed away.
+
+    A validation rule demanding non-negative reactive power would reject real
+    households.
+    """
+    assert float(simbench_data.q_profiles["H0-A"].min()) < 0.0
+
+
+def test_only_loads_carry_reactive_profiles(simbench_data) -> None:
+    pv = next(a for a in simbench_data.assets if a.category == AssetCategory.PV)
+    household = next(
+        a for a in simbench_data.assets if a.category == AssetCategory.HOUSEHOLD
+    )
+    assert simbench_data.q_profile_for(pv) is None
+    assert simbench_data.q_profile_for(household) is not None
+
+
+def test_merge_and_split_round_trip(simbench_data) -> None:
+    """The cache stores one frame, so its content hash covers both groups."""
+    merged = simbench_data.merged()
+    assert merged.shape[1] == (
+        simbench_data.profiles.shape[1] + simbench_data.q_profiles.shape[1]
+    )
+    active, reactive = split_pq(merged)
+    pd.testing.assert_frame_equal(active, simbench_data.profiles)
+    pd.testing.assert_frame_equal(reactive, simbench_data.q_profiles)
+
+
+def test_reactive_profiles_survive_resampling(simbench_data) -> None:
+    tb = TimeBase(sim_dt_min=5, control_dt_min=15)
+    resampled = resample_frame(simbench_data.merged(), tb, policies={})
+    _, reactive = split_pq(resampled)
+    assert reactive.shape[1] == simbench_data.q_profiles.shape[1]
+    assert energy_error(
+        simbench_data.q_profiles["H0-A"], reactive["H0-A"]
+    ) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_pipeline_version_changed_with_reactive_power() -> None:
+    """The cache key must change when the column set changes.
+
+    Adding the reactive columns changes the content hash.
+    """
+    from lvgrid_rl.data.cache import PIPELINE_VERSION
+
+    assert PIPELINE_VERSION == "2"

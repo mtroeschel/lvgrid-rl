@@ -1,19 +1,20 @@
-# M1: SimBench zuerst, WPuQ ab M5.
+# M1: SimBench first, WPuQ from M5.
 #
-# Quelllage SimBench 1.6.1: Jahresprofile 2016 in 15 min, deutsche Ortszeit MIT
-# Sommerzeit. Die Zeitachse ist naiv eingelesen weder monoton noch eindeutig
-# (vier fehlende Viertelstunden im Maerz, vier doppelte im Oktober) und wird
-# beim Import nach UTC konvertiert.
+# Source situation, SimBench 1.6.1: annual profiles for 2016 at 15 minutes, in
+# German local time INCLUDING daylight saving time. Read naively the time axis is
+# neither monotonic nor unique (four quarter-hours missing in March, four
+# duplicated in October); it is converted to UTC on import.
 sources:
   - name: simbench
     profiles: [load, renewables, storage]
     source_tz: Europe/Berlin
-sim_dt_min: 5          # zulaessig: 1, 2, 5, 10 -- 15 teilt 10 nicht (Abschnitt 6.6)
+    reactive_power: true   # *_qload series are carried as their own column group
+sim_dt_min: 5          # permitted: 1, 2, 5, 10 -- 15 does not divide 10 (section 6.6)
 resampling:
-  power: mean          # energieerhaltend
+  power: mean          # energy preserving
   energy_counter: diff
   irradiance: mean
-  temperature: mean
+  temperature: linear
   availability: majority
   state: last
 upsampling:

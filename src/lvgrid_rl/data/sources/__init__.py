@@ -1,1 +1,1 @@
-"""Quellen-Adapter der Datenschicht."""
+"""Data source adapters."""

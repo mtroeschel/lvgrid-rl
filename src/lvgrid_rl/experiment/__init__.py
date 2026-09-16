@@ -1,1 +1,1 @@
-"""Paket lvgrid_rl/experiment."""
+"""Package lvgrid_rl.experiment."""
