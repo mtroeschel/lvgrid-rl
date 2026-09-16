@@ -76,6 +76,16 @@ addopts = "--strict-markers --doctest-modules"
 markers = [
   "invariant: prueft eine Invariante des Erweiterbarkeits-Contracts (Abschnitt 13)",
 ]
+filterwarnings = [
+  "error::DeprecationWarning",
+  # Stammt aus pandas-Interna beim Bilden von Timedelta-Differenzen, nicht aus
+  # unserem Code. Gezielt gefiltert statt pauschal alle Warnungen stummzuschalten.
+  "default:The 'generic' unit for NumPy timedelta is deprecated:DeprecationWarning",
+  # simbench nutzt beim Zusammenfuehren leerer Tabellen eine veraltete
+  # pandas-Konkatenation.
+  "default::FutureWarning:simbench.*",
+  "default::FutureWarning:pandapower.*",
+]
 
 [tool.ruff]
 line-length = 90

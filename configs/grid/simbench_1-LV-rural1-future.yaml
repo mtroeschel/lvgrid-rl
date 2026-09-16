@@ -1,0 +1,17 @@
+# Ausbaustufe 2 von rural1. Das ist das Netz, in dem die Regelungsaufgabe
+# ueberhaupt existiert: die Basisstufe --0-sw enthaelt 13 Haushalte und 4
+# PV-Anlagen, aber keine Speicher, Waermepumpen oder Ladepunkte -- also keine
+# der Stellgroessen, um die es in diesem Projekt geht.
+#
+# Bestand laut SimBench 1.6.1: 15 Busse, 28 Lasten (Haushalt, Landwirtschaft,
+# 8 Waermepumpen, 7 Ladepunkte), 8 PV-Anlagen, 5 Speicher, 1 Ortsnetztrafo.
+simbench_code: 1-LV-rural1--2-sw
+phase_model: balanced
+connection_points:
+  element_types: [load, sgen, gen, storage, asymmetric_load, asymmetric_sgen]
+  exclude_buses: []
+  exclude_elements: []
+  require_nonzero_annual_energy: true
+  # 13 der 15 Busse tragen kundenseitige Elemente. Die Liste wird in M2 einmal
+  # manuell geprueft und dann hier mit Hash fixiert.
+  expected_hash: null

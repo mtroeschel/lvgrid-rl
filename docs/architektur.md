@@ -112,7 +112,23 @@ lvgrid-rl/
 
 **Primär / Default**
 
-- **SimBench-Zeitreihen.** Konsistente Jahreszeitreihen für Last, Erzeugung und Speicher in **15-min-Auflösung für ein vollständiges Jahr**, direkt über `simbench.get_simbench_net()` bzw. die CSV-Tabellen `LoadProfile`, `RESProfile`, `PowerPlantProfile`, `StorageProfile` verfügbar. Der Datensatz enthält u. a. Haushalts- und Gewerbeprofile (an SLP-Klassen angelehnt), acht PV-Profile, Speicherprofile sowie **fünf Wärmepumpen-Profile (`WP-1` … `WP-5`)** mit modellierten bivalenten Betriebsweisen. Vorteil: Netz und Zeitreihen sind aufeinander abgestimmt und über `net["profiles"]` bereits verknüpft. Nachteil: 15 min ist die feinste Auflösung, und **EV-Ladeprofile fehlen**.
+- **SimBench-Zeitreihen.** Konsistente Jahreszeitreihen für Last, Erzeugung und Speicher in **15-min-Auflösung für ein vollständiges Jahr (2016)**, direkt über `simbench.get_simbench_net()` verfügbar. Vorteil: Netz und Zeitreihen sind aufeinander abgestimmt und bereits verknüpft.
+
+  **Korrektur gegenüber v0.1** (geprüft an SimBench 1.6.1, Netz `1-LV-rural1`): Dort stand, SimBench enthalte fünf Wärmepumpenprofile WP-1…WP-5 und **keine** EV-Ladeprofile. Beides ist falsch. Tatsächlich:
+
+  | Profilpräfix | Bedeutung |
+  |---|---|
+  | `H0-*`, `L1-*`, `L2-*`, `G*` | Haushalt, Landwirtschaft, Gewerbe |
+  | `Air_*`, `Soil_*` | Luft- bzw. Erdreich-Wärmepumpen, bivalente Betriebsweise im Namen (`Alternative`, `Parallel`, `Semi-Parallel`) |
+  | `HLS_*_3.7`, `_11.0`, `_22.0` | **Ladepunkte**, Anschlussleistung in kW im Namen |
+  | `PV5`, `PV6`, `PV8` | Photovoltaik |
+  | `Storage_*` | Hausspeicher, an PV- und Lastprofil gekoppelt |
+
+  Die Ladepunktprofile sind allerdings **feste Lastgänge, keine Flexibilitätsbeschreibung**: Ankunft, Abfahrt und Energiebedarf je Ladevorgang sind daraus nicht rekonstruierbar. Für die Regelungsaufgabe bleibt emobpy notwendig; bis dahin sind Ladepunkte unsteuerbare Last. Die inhaltliche Aussage der ursprünglichen Fassung bleibt also richtig, die Tatsachenbehauptung war es nicht.
+
+  **Ausbaustufen.** Die Regelungsaufgabe existiert erst ab Stufe 2. Für `1-LV-rural1`: `--0-sw` hat 13 Haushalte und 4 PV-Anlagen, sonst nichts; `--1-sw` ergänzt 4 Speicher und eine Wärmepumpe; `--2-sw` hat 28 Lasten inklusive 8 Wärmepumpen und 7 Ladepunkten, 8 PV-Anlagen und 5 Speicher.
+
+  **Zeitachse.** Die Zeitstempel sind deutsche Ortszeit **mit** Sommerzeit. Naiv eingelesen ist der Index weder monoton noch eindeutig: am 27.03.2016 fehlen vier Viertelstunden, am 30.10.2016 treten vier doppelt auf. Die Konversion nach UTC ist daher keine Formalie, sondern Voraussetzung für jedes Resampling.
   https://simbench.de/en/download/datasets/ · https://simbench.readthedocs.io
 
 **Haushaltslast hochaufgelöst**
@@ -129,7 +145,7 @@ lvgrid-rl/
 - **WPuQ** (siehe oben) — Messwerte der WP-Last, 10 s.
 - **HEAPO** — 1.408 reale Haushalte mit Wärmepumpe im Kanton Zürich, Smart-Meter-Daten in **15-min- und Tagesauflösung**, 2018-11 bis 2024-03, mit Haushalts-Metadaten, Wetterdaten von 8 Stationen und 410 Vor-Ort-Protokollen. Gut für die Streuung über viele Anlagen.
 - **when2heat (OPSD)** — synthetische Zeitreihen für Wärmebedarf und **COP** (Luft/Erdreich/Grundwasser × Fußboden/Radiator/Warmwasser) für 28 europäische Länder, **stündlich**. Nicht als Lastprofil geeignet, aber als Quelle für COP-Kennlinien und Jahresgang des Wärmebedarfs, der dann über Innentagesprofile auf `sim_dt` disaggregiert wird.
-- **SimBench `WP-1..WP-5`** — 15 min, konsistent zum Netzdatensatz.
+- **SimBench `Air_*` / `Soil_*`** — Luft- und Erdreich-Wärmepumpen, 15 min, konsistent zum Netzdatensatz.
 
 **Elektromobilität**
 
@@ -403,7 +419,7 @@ Das ist die Entscheidung mit den weitreichendsten Folgen, deshalb hier zusammeng
 
 Bei 1008 Zehn-Minuten-Fenstern je Woche erlaubt K95 also **bis zu 50 Fenster außerhalb ±10 %** pro Bus und Woche. Bewertungsort ist der Netzanschlusspunkt.
 
-**Konsequenz 1 — Schrittweite.** 15 min teilt 10 min nicht, daher `sim_dt ∈ {1, 2, 5, 10} min` (§3.3). `control_dt` bleibt ein Vielfaches von `sim_dt` und darf gegenüber dem PQ-Raster versetzt sein — ein 15-min-Regeltakt auf 5-min-Physik ist zulässig und realistisch, die Fensterausrichtung wird aber protokolliert, damit Artefakte erkennbar bleiben.
+**Konsequenz 1 — Schrittweite.** 15 min teilt 10 min nicht, daher `sim_dt ∈ {1, 2, 5, 10} min` (§3.3). `control_dt` bleibt ein Vielfaches von `sim_dt` und darf gegenüber dem PQ-Raster versetzt sein — ein 15-min-Regeltakt auf 5-min-Physik ist zulässig und realistisch, die Fensterausrichtung wird aber protokolliert, damit Artefakte erkennbar bleiben. In M1 bestätigt: die SimBench-Profile müssen von 15 auf 5 min **hoch**gerechnet werden, stückweise konstant und damit energieerhaltend. Neue Information entsteht dabei nicht — die Spitzenglättung der 15-min-Originaldaten bleibt erhalten.
 
 **Konsequenz 2 — der Reward ist nicht mehr schrittweise definierbar.** Ob eine Überschreitung „zählt", hängt von der Verteilung der gesamten Woche ab. Das Problem ist ohne Zusatzzustand nicht Markov'sch und das Kostensignal ist terminal. Drei Bausteine lösen das:
 
