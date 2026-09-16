@@ -5,6 +5,7 @@ __pycache__/
 .mypy_cache/
 *.egg-info/
 .venv/
+*Zone.Identifier
 # Ergebnisse und Datencaches werden nicht versioniert. Reproduzierbarkeit laeuft
 # ueber Konfiguration, Seeds und Datenmanifest, nicht ueber eingecheckte Artefakte.
 results/

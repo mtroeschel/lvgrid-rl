@@ -1,22 +1,44 @@
 name: ci
 
+# Absichtlich nur main und Pull Requests: ein zusaetzliches `push` auf allen
+# Branches wuerde bei PRs aus demselben Repository jeden Lauf doppelt
+# ausfuehren.
 on:
   push:
+    branches: [main]
   pull_request:
+
+permissions:
+  contents: read
+
+# Neuere Pushes auf denselben Ref brechen den laufenden Job ab.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
+    # Dieser Name ist der Kontextname des Status-Checks, den das Ruleset als
+    # erforderlich auswaehlt. Aendert er sich, erscheint der erforderliche
+    # Check nicht mehr und blockiert die Branch dauerhaft.
+    name: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -e ".[dev]"
-      - run: ruff check src tests
-      - run: pytest -v
-      # Die Zahl offener Invarianten (xfail) ist der Fortschrittsindikator des
-      # Erweiterbarkeits-Contracts. Ein unerwartet gruener xfail-Test bricht den
-      # Build (strict=True) und erzwingt, den Marker zu entfernen.
-      - name: Offene Invarianten berichten
-        run: pytest tests/test_invariants.py -q -rx
+
+      - name: Installieren
+        run: pip install -e ".[dev]"
+
+      - name: Linting
+        run: ruff check src tests
+
+      # -rx listet die offenen Invarianten (xfail) in der Zusammenfassung auf.
+      # Die Anzahl ist der Schuldenstand des Erweiterbarkeits-Contracts. Durch
+      # strict=True bricht ein unerwartet gruener Invariantentest den Build und
+      # erzwingt, den Marker zu entfernen.
+      - name: Tests und offene Invarianten
+        run: pytest -q -rx
