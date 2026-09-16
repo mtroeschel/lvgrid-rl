@@ -1,129 +1,137 @@
-# Mitwirken
+# Contributing
 
-## Einrichtung
+## Setup
 
 ```bash
 git clone https://github.com/mtroeschel/lvgrid-rl.git
 cd lvgrid-rl
-uv sync
+uv sync --extra sim
 uv run pytest
 ```
 
-`uv.lock` ist versioniert und gehört zur Reproduzierbarkeitskette. Wer eine
-Abhängigkeit ändert, committet das aktualisierte Lockfile mit -- die CI läuft
-mit `uv sync --locked` und bricht sonst ab.
+`uv.lock` is version-controlled and part of the reproducibility chain. Anyone
+changing a dependency commits the updated lock file as well -- CI runs
+`uv sync --locked` and will otherwise fail.
 
-### Wenn `uv run pytest` ein fehlendes Modul meldet
+The `sim` extra pulls in pandas, pyarrow, pandapower and simbench. Without it,
+`pytest` silently skips the data-layer tests: 57 instead of 96 passing tests and
+no error.
 
-Dann läuft ein `pytest` aus dem System-PATH statt aus `.venv`: das Skript
-`pytest` bringt seinen Interpreter in der Shebang-Zeile mit, und der sieht die
-Pakete der Umgebung nicht. Diagnose:
+### If `uv run pytest` reports a missing module
+
+Then a `pytest` from the system PATH is running instead of the one in `.venv`:
+the `pytest` script carries its own interpreter in its shebang line, and that
+interpreter does not see the environment's packages. Diagnosis:
 
 ```bash
-uv run which pytest      # sollte auf .venv/bin/pytest zeigen
+uv run which pytest      # should point at .venv/bin/pytest
 uv run python -c "import sys; print(sys.executable)"
 ```
 
-Zeigt `which` auf etwas ausserhalb von `.venv`, fehlt pytest in der Umgebung.
-Ursache ist dann meist, dass die Werkzeuge in `[project.optional-dependencies]`
-statt in `[dependency-groups]` stehen -- uv installiert Extras nicht
-standardmäßig, Dependency Groups schon.
+If `which` points outside `.venv`, pytest is missing from the environment. The
+usual cause is tooling declared under `[project.optional-dependencies]` instead
+of `[dependency-groups]` -- uv does not install extras by default, but it does
+install dependency groups.
 
-## Drei Regeln, die vor allem anderen kommen
+## Language
 
-Das sind die Stellen, an denen ein neuer Beitrag am schnellsten Schaden
-anrichtet, und alle drei sind durch Tests abgesichert.
+Code, comments, docstrings, tests and repository documentation are written in
+**English**. This includes error messages, because tests assert on them.
 
-**1. Vorzeichen.** Durchgängig Verbraucher-Zählpfeilsystem, für *alle*
-Anlagentypen: `p_mw > 0` ist Bezug aus dem Netz, `p_mw < 0` Einspeisung. Eine
-PV-Anlage hat immer `p_mw <= 0`. Die Umrechnung auf die pandapower-Konvention
-(`sgen` zählt umgekehrt) passiert ausschließlich im Netzadapter
-(`lvgrid_rl.grid`) und nirgendwo sonst. Siehe
-`lvgrid_rl.core.units.SIGN_CONVENTION`.
+The switch from German happened after M1; files not yet converted are being
+migrated file by file. When you touch a file, translate it as part of the same
+change rather than leaving it half-converted.
 
-**2. Einheiten.** Jedes numerische Feld eines Schematyps trägt ein
-Einheiten-Suffix aus `lvgrid_rl.core.units.UNIT_SUFFIXES`. Ein Test erzwingt
-das über alle Schematypen. Neue Felder ohne Einheit müssen bewusst in
-`UNITLESS_FIELDS` in `tests/test_core.py` aufgenommen werden — das soll eine
-Entscheidung sein, keine Nachlässigkeit.
+## Three rules that come before everything else
 
-**3. Invarianten.** `tests/test_invariants.py` schützt die sieben Invarianten
-des Erweiterbarkeits-Contracts (Abschnitt 13 in `docs/architektur.md`). Offene
-Invarianten sind `xfail(strict=True)` markiert. Wird eine Komponente
-implementiert und der zugehörige Test unerwartet grün, **bricht der Build** —
-dann ist der Marker zu entfernen und die im Docstring genannten Prüfkriterien
-sind auszuformulieren. Ein Marker darf nie entfernt werden, ohne den Test
-tatsächlich zu schreiben.
+These are the places where a new contribution does damage fastest, and all three
+are guarded by tests.
 
-## Ablauf
+**1. Signs.** Consumer reference direction throughout, for *all* asset types:
+`p_mw > 0` means drawing from the grid, `p_mw < 0` means feeding in. A PV system
+therefore always has `p_mw <= 0`. Conversion to the pandapower convention
+(`sgen` counts the other way) happens exclusively in the grid adapter
+(`lvgrid_rl.grid`) and nowhere else. See `lvgrid_rl.core.units.SIGN_CONVENTION`.
 
-Ein Branch je Meilenstein, zum Beispiel `m1-datenschicht`, und ein Pull Request
-auch bei Alleinarbeit. Der PR ist der Ort, an dem CI-Ergebnis, Entscheidungen
-und Begründungen dokumentiert sind — für eine wissenschaftliche Arbeit ist das
-der Prüfpfad, nicht Bürokratie.
+**2. Units.** Every numeric field of a schema type carries a unit suffix from
+`lvgrid_rl.core.units.UNIT_SUFFIXES`, and a test enforces this across all schema
+types. New fields without a unit must be added deliberately to `UNITLESS_FIELDS`
+in `tests/test_core.py` -- that should be a decision, not an oversight.
 
-## Pre-Commit-Hooks
+**3. Invariants.** `tests/test_invariants.py` guards the seven invariants of the
+extensibility contract (section 13 in `docs/architektur.md`). Open invariants are
+marked `xfail(strict=True)`. When a component is implemented and its test turns
+green unexpectedly, **the build breaks** -- at which point the marker is removed
+and the acceptance criteria named in the docstring are written out. A marker
+must never be removed without actually writing the test.
 
-Einmalig je Klon einrichten:
+## Workflow
+
+One branch per milestone, for example `m1-data-layer`, and a pull request even
+when working alone. The PR is where the CI result, the decisions and their
+reasoning are recorded -- for an academic project that is the audit trail, not
+bureaucracy.
+
+## Pre-commit hooks
+
+Set up once per clone:
 
 ```bash
-uv sync
+uv sync --extra sim
 uv run pre-commit install
 ```
 
-Danach laufen vor jedem Commit genau die Pruefungen, die auch die CI laeuft.
-Der Anlass fuer diese Hooks war konkret: in M0 war die CI rot, weil `ruff` nie
-lokal gelaufen war -- die Tests waren gruen, der Linter hatte 62 Verstoesse.
+After that, every commit runs the same checks as CI. The concrete reason for
+these hooks: in M0 the CI was red because `ruff` had never been run locally --
+the tests were green and the linter had 62 violations.
 
-Auf dem gesamten Bestand pruefen, etwa nach dem Klonen oder nach einem
-`autoupdate`:
+To check the whole tree, for instance after cloning or after an `autoupdate`:
 
 ```bash
-pre-commit run --all-files
+uv run pre-commit run --all-files
 ```
 
-Der Test-Hook ruft `uv run --frozen python -m pytest` auf und setzt damit
-voraus, dass `uv` im PATH liegt. Grund: Git-Hooks laufen mit dem PATH des
-aufrufenden Terminals, nicht in der aktivierten `.venv`. Ein direkter Aufruf
-von `pytest` wuerde ein Skript aus dem System-PATH treffen, ein Aufruf von
-`python -m pytest` scheitert auf Systemen, die nur `python3` kennen, mit
-"Executable `python` not found". Wer ohne uv arbeitet, ueberspringt den Hook
-einzeln:
+The test hook invokes `uv run --frozen python -m pytest` and therefore requires
+`uv` on the PATH. Git hooks run with the PATH of the invoking terminal, not
+inside the activated `.venv`. Calling `pytest` directly would hit a script from
+the system PATH, and calling `python -m pytest` fails on systems that only have
+`python3`, with "Executable `python` not found". If you work without uv, skip
+the hook individually:
 
 ```bash
 SKIP=pytest git commit -m "..."
 ```
 
-und verlaesst sich auf die CI. Die Ruff-Hooks sind davon nicht betroffen,
-pre-commit verwaltet deren Umgebung selbst.
+and rely on CI. The ruff hooks are unaffected; pre-commit manages their
+environments itself.
 
-Sollte die Testsuite mit pandapower und echten Trainingslaeufen spuerbar
-langsamer werden, gehoert der Hook nach `stages: [pre-push]`. In M0 liegt die
-gesamte Hook-Kette bei gut einer Sekunde.
+If the test suite becomes noticeably slower with pandapower and real training
+runs, the hook belongs under `stages: [pre-push]`. In M1 the whole hook chain
+takes a little over a second.
 
-Zwei Dinge dazu. Erstens ersetzt `pre-commit` die CI nicht: die Hooks sehen nur
-die gestageten Dateien und laufen in der lokalen Umgebung, waehrend die CI den
-vollstaendigen Baum frisch aufsetzt. Zweitens ist die Ruff-Version in
-`.pre-commit-config.yaml` und in den `dev`-Extras von `pyproject.toml` bewusst
-identisch gepinnt -- laufen Hook und CI auseinander, meldet der eine, was der
-andere durchlaesst, und dann vertraut man beiden nicht mehr.
+Two further points. First, `pre-commit` does not replace CI: the hooks only see
+staged files and run in the local environment, whereas CI sets up the full tree
+from scratch. Second, the ruff version in `.pre-commit-config.yaml` and in the
+`dev` group of `pyproject.toml` is deliberately pinned to the same value -- if
+hook and CI drift apart, one reports what the other lets through, and then
+neither is trusted.
 
-Ohne Hooks vor dem Push mindestens:
+Without hooks, before pushing at least:
 
 ```bash
-ruff check src tests
-ruff format --check src tests scripts
-pytest -q
+uv run ruff check src tests
+uv run ruff format --check src tests scripts
+uv run pytest -q
 ```
 
-## Keine Daten im Repository
+## No data in the repository
 
-Rohdaten und abgeleitete Caches werden nicht versioniert, siehe `data/README.md`.
-Reproduzierbarkeit läuft über Konfiguration, Seeds und Datenmanifest.
+Raw data and derived caches are not version-controlled, see `data/README.md`.
+Reproducibility runs through configuration, seeds and the data manifest.
 
-## KI-Unterstützung kenntlich machen
+## Declaring AI assistance
 
-Teile dieses Projekts entstehen mit Unterstützung eines KI-Assistenten. Solche
-Beiträge werden im Commit über einen `Co-authored-by`-Trailer oder in der
-PR-Beschreibung ausgewiesen. Für wissenschaftliche Veröffentlichungen gelten
-zusätzlich die Offenlegungsregeln der jeweiligen Zeitschrift und Institution.
+Parts of this project are produced with the help of an AI assistant. Such
+contributions are declared via a `Co-authored-by` trailer in the commit or in
+the pull request description. For academic publications, the disclosure rules of
+the respective journal and institution apply in addition.
