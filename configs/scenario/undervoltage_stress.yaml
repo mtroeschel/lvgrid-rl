@@ -1,0 +1,11 @@
+# Counterpart to voltage_stress. K100 is asymmetric (-15 % against +10 %), so at
+# least one undervoltage-dominated scenario is needed to exercise the lower
+# criterion at all. Also an extreme case, not a forecast.
+name: undervoltage_stress
+slack_vm_pu: 0.96
+trafo_tap_pos: null
+trafo_sn_scale: 0.7
+scale:
+  heat_pump: 2.5
+  ev_charger: 2.5
+  pv: 0.5

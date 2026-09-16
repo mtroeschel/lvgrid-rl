@@ -1,0 +1,9 @@
+# Extreme case, deliberately beyond the SimBench data. For testing the
+# controller and the evaluation chain, NOT a realistic forecast. Any results
+# table using it must say so.
+name: voltage_stress
+slack_vm_pu: 1.05
+trafo_tap_pos: null
+trafo_sn_scale: 0.7
+scale:
+  pv: 2.5

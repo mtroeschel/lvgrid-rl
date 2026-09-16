@@ -1,0 +1,16 @@
+# Working scenario, chosen after the grid survey (scripts/survey_grids.py) showed
+# that the published SimBench stage-2 scenarios produce no voltage band violation
+# in any of the six low-voltage grids.
+#
+# Two levers, both declarative and both logged in the run manifest so the
+# distance from the published reference stays visible:
+#   - the point of common coupling (slack voltage), the physically honest lever
+#   - moderate growth in PV, heat pumps and charge points
+name: moderate_growth
+slack_vm_pu: 1.04
+trafo_tap_pos: null
+trafo_sn_scale: 1.0
+scale:
+  pv: 1.5
+  heat_pump: 1.3
+  ev_charger: 1.3
