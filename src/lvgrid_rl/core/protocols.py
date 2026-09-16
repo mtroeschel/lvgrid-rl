@@ -16,9 +16,10 @@ Konkrete Implementierungen folgen ab M2.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Mapping, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import numpy as np
 
@@ -86,6 +87,7 @@ class ActionSpec:
 
     @property
     def dim(self) -> int:
+        """Dimension des Aktionsraums dieser Anlage."""
         return len(self.names)
 
 
@@ -111,6 +113,7 @@ class Setpoint:
 
     @property
     def was_clipped(self) -> bool:
+        """Wurde die vorgeschlagene Aktion begrenzt?"""
         return bool(self.clipping_info)
 
 
@@ -255,6 +258,7 @@ class SafetyCertifier(Protocol):
     def certify(
         self, state: SystemState, action: np.ndarray, uncertainty: UncertaintySet
     ) -> Verdict:
+        """Ist die Aktion fuer alle Realisierungen der Unsicherheitsmenge zulaessig?"""
         ...
 
 
@@ -301,11 +305,13 @@ class NullSafetyComponent:
     def transform(
         self, action: np.ndarray, state: SystemState, info: InformationSet
     ) -> tuple[np.ndarray, InterventionInfo]:
+        """Gibt die Aktion unveraendert zurueck."""
         return action, InterventionInfo(intervened=False)
 
     def action_mask(
         self, state: SystemState, info: InformationSet
     ) -> np.ndarray | None:
+        """Erlaubt alle Aktionen."""
         return None
 
 
@@ -328,7 +334,9 @@ class Controller(Protocol):
     """
 
     def reset(self, info: InformationSet) -> None:
+        """Internen Zustand zu Episodenbeginn zuruecksetzen."""
         ...
 
     def act(self, info: InformationSet) -> np.ndarray:
+        """Aktion fuer den aktuellen Entscheidungszeitpunkt."""
         ...

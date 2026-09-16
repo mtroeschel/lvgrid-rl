@@ -7,12 +7,12 @@ Erweiterbarkeits-Contracts stehen in ``test_invariants.py``.
 from __future__ import annotations
 
 import dataclasses
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 import pytest
 
-from lvgrid_rl.core import information, schemas
+from lvgrid_rl.core import information
 from lvgrid_rl.core.information import (
     ClairvoyanceError,
     DecisionScope,
@@ -184,8 +184,10 @@ def test_exogenous_input_requires_matching_bounds() -> None:
 
 
 def test_exogenous_input_rejects_realisation_outside_bounds() -> None:
-    """Eine Realisierung ausserhalb der Schranken macht jede spaetere
-    Sicherheitsaussage auf ihrer Basis ungueltig und ist daher ein Fehler."""
+    """Realisierungen ausserhalb der Schranken sind ein Fehler.
+
+    Sie wuerden jede spaetere Sicherheitsaussage auf ihrer Basis entwerten.
+    """
     with pytest.raises(ValueError, match="ausserhalb der Schranken"):
         ExogenousInput(
             t_index=0,
@@ -263,7 +265,7 @@ def test_system_state_requires_timezone_aware_timestamp() -> None:
 def test_system_state_accepts_utc() -> None:
     state = SystemState(
         t_index=0,
-        timestamp=datetime(2016, 6, 1, 12, 0, tzinfo=timezone.utc),
+        timestamp=datetime(2016, 6, 1, 12, 0, tzinfo=UTC),
         topology_id="base",
         grid=make_grid_state(),
         assets={},
@@ -337,8 +339,11 @@ def test_null_safety_component_passes_actions_through() -> None:
 
 
 def test_verdict_has_no_unsafe_value() -> None:
-    """Die Asymmetrie ist Absicht: ein Zertifizierer darf konservativ sein,
-    aber nie optimistisch (Abschnitt 6.9)."""
+    """Es gibt kein ``UNSAFE``, und das ist Absicht.
+
+    Ein Zertifizierer darf konservativ sein, aber nie optimistisch
+    (Abschnitt 6.9).
+    """
     assert {v.name for v in Verdict} == {"CERTIFIED_SAFE", "NOT_CERTIFIED"}
 
 

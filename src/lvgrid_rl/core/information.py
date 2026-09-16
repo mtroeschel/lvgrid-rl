@@ -19,10 +19,10 @@ Das Modul stellt zwei Dinge bereit:
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterator, Mapping
 
 import numpy as np
 
@@ -38,8 +38,10 @@ __all__ = [
 
 
 class ClairvoyanceError(RuntimeError):
-    """Es wurde auf Information zugegriffen, die zum Entscheidungszeitpunkt
-    nicht verfuegbar ist."""
+    """Zugriff auf Information, die zum Entscheidungszeitpunkt fehlt.
+
+    Siehe :func:`assert_readable` und :class:`DecisionScope`.
+    """
 
 
 # Der Entscheidungshorizont ist Thread-lokal, damit parallele Environments in
@@ -48,8 +50,10 @@ _local = threading.local()
 
 
 def current_decision_horizon() -> int | None:
-    """Aktuell gueltiger Entscheidungszeitpunkt, oder ``None`` ausserhalb
-    eines :class:`DecisionScope`."""
+    """Aktuell gueltiger Entscheidungszeitpunkt.
+
+    Gibt ``None`` zurueck, wenn kein :class:`DecisionScope` aktiv ist.
+    """
     return getattr(_local, "horizon", None)
 
 
@@ -202,6 +206,7 @@ class InformationSet:
         )
 
     def bound_of(self, series_id: str) -> Interval:
+        """Schranken einer einzelnen Zeitreihe im kommenden Intervall."""
         i = self.series_ids.index(series_id)
         return Interval(
             float(self.exogenous_bounds_mw[0, i]),

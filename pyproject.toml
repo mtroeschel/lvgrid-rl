@@ -68,7 +68,18 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "D"]
-ignore = ["D203", "D213"]
+# D203/D213: widerspruechliche Einrueckungsregeln, von der Google-Konvention
+#   ohnehin ausgeschlossen.
+# D105/D107: Dunder- und __post_init__-Methoden. Ihre Semantik ist durch die
+#   Sprache festgelegt; ein erzwungener Docstring erzeugt dort Rauschen. Die
+#   Begruendung der Validierungslogik steht im Docstring der jeweiligen Klasse.
+ignore = ["D203", "D213", "D105", "D107"]
+
+[tool.ruff.lint.per-file-ignores]
+# In Tests ist der Funktionsname die Dokumentation; ein Docstring je Testfunktion
+# waere Verdopplung. Die Formatregeln D205/D209 bleiben aktiv, damit vorhandene
+# Docstrings einheitlich bleiben.
+"tests/**" = ["D103"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

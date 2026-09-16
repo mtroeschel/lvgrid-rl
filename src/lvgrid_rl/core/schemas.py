@@ -26,9 +26,10 @@ Einheiten und Vorzeichen: siehe :mod:`lvgrid_rl.core.units`.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Mapping, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import numpy as np
 
@@ -87,6 +88,7 @@ class Interval:
 
     @property
     def width(self) -> float:
+        """Breite des Intervalls."""
         return self.hi - self.lo
 
 
@@ -286,6 +288,7 @@ class PQBudgetState:
         return self.violations_k95_count / max(self.budget_windows_count, 1)
 
     def windows_remaining_count(self) -> int:
+        """Verbleibende 10-min-Fenster im laufenden Wochenintervall."""
         return max(self.windows_total_count - self.windows_elapsed_count, 0)
 
 

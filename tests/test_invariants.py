@@ -79,8 +79,10 @@ def test_i1_observation_is_a_pure_projection_of_system_state() -> None:
 
 
 def test_i1_system_state_is_the_single_source_of_truth_today() -> None:
-    """Teilaussage von I1, bereits pruefbar: ``SystemState`` enthaelt Netz-,
-    Anlagen-, exogenen und PQ-Zustand und ist damit vollstaendig."""
+    """I1, bereits pruefbarer Teil: ``SystemState`` ist vollstaendig.
+
+    Er enthaelt Netz-, Anlagen-, exogenen und PQ-Zustand.
+    """
     names = {f.name for f in dataclasses.fields(SystemState)}
     assert {"grid", "assets", "exogenous", "pq", "topology_id"} <= names
 
@@ -134,8 +136,10 @@ def test_i3_decision_scope_blocks_access_to_future_realisations() -> None:
 
 
 def test_i3_information_set_cannot_express_clairvoyance() -> None:
-    """I3: strukturelle Absicherung -- es gibt kein Feld fuer realisierte
-    Werte des kommenden Intervalls."""
+    """I3: strukturelle Absicherung gegen Hellsichtigkeit.
+
+    Es gibt kein Feld fuer realisierte Werte des kommenden Intervalls.
+    """
     names = {f.name for f in dataclasses.fields(InformationSet)}
     forbidden = {n for n in names if "realiz" in n or "realis" in n}
     assert not forbidden, f"Hellsichtigkeit ausdrueckbar ueber: {forbidden}"
