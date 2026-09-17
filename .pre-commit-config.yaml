@@ -1,45 +1,42 @@
-# Lokale Absicherung vor dem Commit. Grund fuer diese Datei: in M0 war die CI
-# rot, weil `ruff` nie lokal gelaufen war -- die Tests waren gruen, der Linter
-# hatte 62 Verstaende. Diese Hooks laufen genau die Pruefungen, die auch die CI
-# laeuft, nur schon vor dem Commit.
+# Local safeguard before committing. The concrete reason for this file: in M0 the
+# CI was red because `ruff` had never been run locally -- the tests were green and
+# the linter had 62 violations. These hooks run exactly the checks CI runs, only
+# earlier.
 #
-# Einrichtung (einmalig je Klon):
+# Setup (once per clone):
 #     pip install -e ".[dev]"
 #     pre-commit install
 #
-# Auf dem gesamten Bestand pruefen:
+# Check the whole tree:
 #     pre-commit run --all-files
 #
-# Die Hook-Versionen aktualisieren:
+# Update the hook versions:
 #     pre-commit autoupdate
 #
-# Wichtig: pre-commit ersetzt die CI nicht. Die Hooks sehen nur die gestageten
-# Dateien und laufen in der Umgebung des Entwicklungsrechners; die CI prueft den
-# vollstaendigen Baum in einer frischen Umgebung.
+# Important: pre-commit does not replace CI. The hooks only see staged files and
+# run in the developer's environment; CI checks the full tree in a fresh one.
 
-# Absichtlich keine `default_language_version`: eine Pinnung auf python3.11
-# laesst die Hooks auf jedem Rechner fehlschlagen, der nur eine neuere Version
-# installiert hat. pre-commit nutzt ohne Angabe den laufenden Interpreter, und
-# `requires-python = ">=3.11"` in pyproject.toml deckt die Untergrenze ab. Die
-# verbindliche Versionspruefung gehoert in die CI, nicht in einen lokalen Hook.
+# Deliberately no `default_language_version`: pinning to python3.11 makes the
+# hooks fail on any machine that only has a newer version. Without it pre-commit
+# uses the running interpreter, and `requires-python = ">=3.11"` in pyproject.toml
+# covers the lower bound. The binding version check belongs in CI, not in a local
+# hook.
 
 repos:
   # --------------------------------------------------------------------- Linter
-  # Die Version ist absichtlich an die Entwicklungsabhaengigkeit in
-  # pyproject.toml gekoppelt. Laufen Hook und CI mit unterschiedlichen
-  # Ruff-Versionen auseinander, meldet der eine, was der andere durchlaesst --
-  # und das untergraebt das Vertrauen in beide.
+  # The version is deliberately tied to the development dependency in
+  # pyproject.toml. If hook and CI drift apart on the ruff version, one reports
+  # what the other lets through, which undermines trust in both.
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.7
     hooks:
-      # Bewusst ohne --fix: der Hook soll dasselbe Urteil faellen wie die CI
-      # und nicht still Code aendern, der dann uneingesehen committet wird.
+      # Deliberately without --fix: the hook should reach the same verdict as CI
+      # rather than silently changing code that is then committed unreviewed.
       - id: ruff-check
-      # Achtung, nuetzlicher Nebeneffekt: ruff-format formatiert auch
-      # ```python-Bloecke in Markdown-Dateien. Die Codeskizzen in
-      # docs/architektur.md bleiben damit automatisch im Stil des Quellcodes.
-      # Bloecke, die absichtlich kein gueltiges Python sind (Pseudocode),
-      # deshalb als ```text auszeichnen, nicht als ```python.
+      # Note, a useful side effect: ruff-format also formats ```python blocks in
+      # Markdown files, so the code sketches in docs/architecture.md stay in the
+      # style of the source. Blocks that are deliberately not valid Python
+      # (pseudocode) must therefore be marked ```text, not ```python.
       - id: ruff-format
 
   # ------------------------------------------------------------------- Hygiene
@@ -54,42 +51,40 @@ repos:
       - id: check-toml
       - id: check-merge-conflict
       - id: check-case-conflict
-      # Technische Rueckversicherung der Datenpolitik aus data/README.md: keine
-      # Rohdaten und keine Ergebnisartefakte im Repository. .gitignore deckt die
-      # bekannten Pfade ab, diese Grenze faengt den Rest.
+      # Technical backstop for the data policy in data/README.md: no raw data and
+      # no result artefacts in the repository. .gitignore covers the known paths,
+      # this limit catches the rest.
       - id: check-added-large-files
         args: [--maxkb=500]
-      # Ein versehentlich committeter privater Schluessel laesst sich aus einer
-      # oeffentlichen Historie nicht mehr entfernen, nur noch rotieren.
+      # A private key committed by accident cannot be removed from a public
+      # history, only rotated.
       - id: detect-private-key
 
   # ---------------------------------------------------------------------- Tests
-  # Als lokaler Hook, damit die Tests in derselben Umgebung laufen wie beim
-  # manuellen Aufruf. Vertretbar, weil die Suite in M0 unter einer Sekunde
-  # braucht; sollte sie mit pandapower und Trainingslaeufen deutlich langsamer
-  # werden, gehoert sie in `stages: [pre-push]` statt `pre-commit`.
+  # A local hook, so the tests run in the same environment as a manual call.
+  # Acceptable while the suite is fast; once pandapower and real training runs
+  # make it noticeably slower it belongs under `stages: [pre-push]` instead of
+  # `pre-commit`.
   - repo: local
     hooks:
       - id: pytest
-        name: pytest (inkl. offener Invarianten)
-        # Der Aufruf geht bewusst ueber `uv run`, und zwar aus zwei Gruenden.
+        name: pytest (including open invariants)
+        # The call deliberately goes through `uv run`, for two reasons.
         #
-        # Nicht `pytest`: das Skript wird ueber PATH aufgeloest und bringt
-        # seinen eigenen Interpreter in der Shebang-Zeile mit. Liegt es
-        # ausserhalb der Projektumgebung, laufen die Tests gegen einen
-        # Interpreter, der die Projektpakete nicht sieht.
+        # Not `pytest`: that script is resolved via PATH and carries its own
+        # interpreter in its shebang line. If it sits outside the project
+        # environment, the tests run against an interpreter that cannot see the
+        # project packages.
         #
-        # Auch nicht `python -m pytest`: Git-Hooks laufen mit dem Umgebungs-
-        # PATH des aufrufenden Terminals, nicht in der aktivierten `.venv`.
-        # Auf vielen Systemen gibt es dort gar kein `python`, sondern nur
-        # `python3` -- oder keins von beidem, wenn der Interpreter von uv
-        # verwaltet wird. Der Hook scheitert dann mit
+        # Not `python -m pytest` either: git hooks run with the PATH of the
+        # invoking terminal, not inside the activated `.venv`. On many systems
+        # there is no `python` there at all, only `python3` -- or neither, when
+        # the interpreter is managed by uv. The hook then fails with
         # "Executable `python` not found".
         #
-        # `uv run --frozen` loest beides: es waehlt den Interpreter der
-        # Projektumgebung und haelt sie am Lockfile, ohne dieses beim Commit
-        # neu aufzuloesen. Voraussetzung ist, dass `uv` im PATH liegt -- das
-        # Projekt setzt uv ohnehin voraus (siehe README).
+        # `uv run --frozen` solves both: it picks the project environment's
+        # interpreter and keeps it at the lock file without re-resolving on every
+        # commit. It requires `uv` on the PATH, which the project assumes anyway.
         entry: uv run --frozen python -m pytest -q -rx
         language: system
         types: [python]

@@ -9,11 +9,12 @@ Grid simulation with [pandapower](https://pandapower.readthedocs.io) and
 [SimBench](https://simbench.de), agents with
 [Stable-Baselines3](https://stable-baselines3.readthedocs.io).
 
-**Status: M1** -- skeleton, core schemas and data layer. There is no simulation
-and no agent yet. What exists is the interface layer everything else builds on,
-a verified reproducibility chain, and time series preparation from SimBench.
+**Status: M2** -- skeleton, core schemas, data layer and grid layer. There is no
+agent yet. What exists is the interface layer everything else builds on, a
+verified reproducibility chain, time series preparation from SimBench, an AC
+power flow engine, the EN 50160 assessment and configurable scenarios.
 
-The full architecture is in `docs/architektur.md`.
+The full architecture is in `docs/architecture.md`.
 
 ## Installation
 
@@ -38,6 +39,8 @@ pip install -e ".[sim]" --group dev
 
 ```bash
 uv run python scripts/prepare_data.py --code 1-LV-rural1--2-sw --sim-dt 5
+uv run python scripts/survey_grids.py --samples 150
+uv run python scripts/run_baseline.py --scenario moderate_growth --stride 24
 uv run pytest -v
 ```
 
@@ -100,7 +103,7 @@ removed. The number of XFAIL reports is the contract's debt count.
 | I2 | Asset dynamics as pure functions | M4 | open |
 | I3 | Strict information ordering | M3 | mechanism green |
 | I4 | Physical actions, affine invertible normalisation | M3 | open |
-| I5 | Hypothetical power flow without side effects | M2 | open |
+| I5 | Hypothetical power flow without side effects | M2 | **green** |
 | I6 | Exogenous inputs carry bounds, ratings maintained | M1 | **green** |
 | I7 | Both safety intervention points present | M3 | null implementation green |
 
@@ -108,11 +111,23 @@ The reason for the effort: promises of modularity decay silently. Six months
 without a check and some reasonable shortcut has used up the extensibility
 without anyone noticing.
 
+## Working grid and scenario
+
+`1-LV-rural1--2-sw` with the `moderate_growth` scenario. The published SimBench
+scenarios produce no voltage band violation in any of the six low-voltage grids,
+so the scenario raises the point of common coupling and adds moderate growth in
+PV, heat pumps and charge points. Under it, 15 % of bus-weeks fail EN 50160 and
+12.6 % of steps are thermally overloaded -- a control problem that is neither
+trivially satisfied nor hopeless. See section 4.4 of the architecture document,
+and reproduce with `scripts/survey_grids.py`.
+
 ## Next steps
 
-* **M2** grid: loader, asset mapping, `PowerFlowEngine` including the
-  hypothetical call, `PQAggregator`, EN 50160 evaluator -- and the P4 pre-check:
-  does a feasible fallback action exist at all in the planned scenarios?
+* **M3** minimal environment: PV curtailment only, Gymnasium API, `pq_budget`
+  observation features, both constraint terms in the reward, and baselines B0-B4
+  with their own parameter search.
+
+See section 12 of the architecture document for the full roadmap.
 
 ## License
 

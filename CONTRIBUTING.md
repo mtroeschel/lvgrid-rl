@@ -59,7 +59,7 @@ types. New fields without a unit must be added deliberately to `UNITLESS_FIELDS`
 in `tests/test_core.py` -- that should be a decision, not an oversight.
 
 **3. Invariants.** `tests/test_invariants.py` guards the seven invariants of the
-extensibility contract (section 13 in `docs/architektur.md`). Open invariants are
+extensibility contract (section 13 in `docs/architecture.md`). Open invariants are
 marked `xfail(strict=True)`. When a component is implemented and its test turns
 green unexpectedly, **the build breaks** -- at which point the marker is removed
 and the acceptance criteria named in the docstring are written out. A marker
