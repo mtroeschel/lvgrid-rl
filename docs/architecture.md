@@ -528,11 +528,18 @@ apply from M3:
    vector of fixed length.
 3. No learned global observation normalisation (`VecNormalize` on observations),
    but fixed physical scales per feature.
-4. A `PettingZooAdapter` exists from M3, even unused, together with a
+4. A partitioned multi-agent view exists from M3, even unused, together with a
    **regression test**: the single-agent environment and the multi-agent
    environment with one partition must produce bit-identical trajectories given
    identical actions. That test is the only reliable protection against the two
    paths drifting apart over months.
+
+   Implemented as `env/multiagent.py`, a dependency-free view with the shape of a
+   PettingZoo `ParallelEnv` — dictionary actions and observations keyed by agent —
+   rather than as a PettingZoo adapter proper. Adding a dependency for an
+   interface nothing uses yet buys nothing; the typed shell is a thin wrapper and
+   belongs in M10, when multi-agent work actually starts. The property this rule
+   protects is what is tested, and it is tested now.
 
 The **safety layer** is not a Gym wrapper but a component *inside* the
 environment, because a wrapper only sees the observation whereas a certifier

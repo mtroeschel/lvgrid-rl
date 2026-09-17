@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
-from lvgrid_rl.components.pv import PvSystem
+from lvgrid_rl.components.pv import PvMode, PvSystem
 from lvgrid_rl.data.sources.simbench import AssetCategory, categorize
 from lvgrid_rl.data.timebase import TimeBase
 from lvgrid_rl.env.episodes import EpisodeSampler, EpisodeSpec
@@ -72,9 +72,23 @@ def make_env(
     set_name: str = "train",
     config: EnvConfig | None = None,
     episode_spec: EpisodeSpec | None = None,
+    pv_mode: str = "p_only",
     seed: int | None = None,
 ) -> LVGridEnv:
-    """Build an environment for one grid, scenario and evaluation set."""
+    """Build an environment for one grid, scenario and evaluation set.
+
+    Args:
+        code: SimBench code of the grid.
+        scenario: Name of a scenario in the scenario library.
+        split_path: Committed week split for this grid.
+        set_name: Which evaluation set to draw episodes from.
+        config: Environment configuration.
+        episode_spec: Episode configuration.
+        pv_mode: Which quantities the PV systems expose. ``p_only`` is the main
+            study (decision D4); ``pq`` is needed for reference method B3, whose
+            Q(U) characteristic has nothing to act on otherwise.
+        seed: Base seed of the environment.
+    """
     config = config or EnvConfig()
     timebase = TimeBase(config.sim_dt_min, config.control_dt_min)
     model = load_grid(code, SCENARIO_LIBRARY[scenario])
@@ -93,6 +107,7 @@ def make_env(
             PvSystem(
                 asset_id=asset_id,
                 bus=int(row["bus"]),
+                mode=PvMode(pv_mode),
                 ratings=AssetRatings(
                     p_min_mw=-rated,
                     p_max_mw=0.0,

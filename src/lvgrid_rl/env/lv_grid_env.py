@@ -355,8 +355,19 @@ class LVGridEnv(gym.Env):
         for _ in range(self.steps_per_control):
             if self._t >= len(self._profiles) - 1:
                 break
+            exogenous = self._exogenous(self._t)
+            # The decision is held for the whole control step, but the physics is
+            # not: a PV system cannot feed in more than the current irradiance
+            # allows. Limiting here rather than in the controller keeps the
+            # decision/physics split clean.
+            applied = {
+                asset.asset_id: asset.apply_availability(
+                    controlled[asset.asset_id], exogenous
+                )
+                for asset in self.assets
+            }
             setpoints = self._setpoints_for(self._t)
-            setpoints.update(controlled)
+            setpoints.update(applied)
             grid = self.engine.run(setpoints, self._t)
             inner_steps += 1
 
@@ -373,11 +384,10 @@ class LVGridEnv(gym.Env):
                 - np.asarray(before.violations_k100_count).sum()
             )
 
-            exogenous = self._exogenous(self._t)
             for asset in self.assets:
                 new_state, outcome = asset.dynamics(
                     self._asset_states[asset.asset_id],
-                    controlled[asset.asset_id],
+                    applied[asset.asset_id],
                     exogenous,
                     grid,
                 )
