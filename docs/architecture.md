@@ -635,12 +635,31 @@ failure cannot be attributed to either.
    label.
 2. Two axes with three quantile bins each, giving nine strata. Three axes with 27
    strata would be too fine for 51 weeks.
+
+   The axes are **PV energy and EV energy**, which is not the obvious pairing and
+   was chosen after measuring the rank correlations: PV energy and heat pump
+   energy are Spearman **−0.81** correlated and peak reverse flow is **+0.89**
+   correlated with PV energy. All three are seasonal proxies, so stratifying on
+   two of them leaves the high-PV/high-heat and low-PV/low-heat corners empty —
+   seven of nine strata occupied, and the second axis adds almost nothing. EV
+   energy is the only feature essentially uncorrelated with the rest (−0.05
+   against PV, 0.07 against heat pump). PV stays the first axis because the
+   voltage problem here is PV-driven overvoltage; for an undervoltage-dominated
+   scenario the first axis should be heat pump energy instead.
 3. Weeks are drawn from each stratum proportionally into train, validation and
    test.
 4. **Embargo:** weeks immediately adjacent to a test week are dropped from
    training. Weather autocorrelation operates on the scale of days, so adjacent
-   weeks are genuinely similar; this is the standard remedy and costs roughly ten
-   training weeks, which is acceptable.
+   weeks are genuinely similar.
+
+   This is not free, and the measured cost is higher than first estimated: with
+   nine test weeks among 51, an embargo of one week costs **nine** training weeks
+   (26 down to 17), an embargo of two costs fifteen. The default of one trades
+   roughly a third of the training weeks against an adjacency-inflated test
+   result. The episode sampler can start anywhere inside a training week, so the
+   number of distinct episodes is far larger than the week count suggests. The
+   embargo is switchable off, so how much it actually changes the reported KPI
+   can be measured rather than assumed.
 
 The split is drawn with a dedicated `split_seed`, the resulting week lists are
 committed to the configuration and carried in the run manifest, so it stays
@@ -665,8 +684,15 @@ genuine year holdout — train on 2018/19, test on 2020. That is the clean split
 which stratification and leakage avoidance no longer conflict. SimBench provides
 only one year, so the stratified split is a workaround here, if a justified one.
 
-Implementation in `env/splits.py`: week characterisation, stratified assignment,
-embargo, and serialisation of the resulting week lists.
+Implementation in `env/splits.py`; `scripts/make_split.py` generates the split and
+prints a coverage report. The resulting week lists are committed under
+`configs/split/`, because from M3 onwards every milestone reports on the same
+weeks and regenerating the file changes every reported KPI.
+
+Measured result for `1-LV-rural1--2-sw`: 17 training weeks, 8 validation, 9 test,
+3 stress weeks, 5 in the held-out month, 9 embargoed. The test set covers all nine
+occupied strata, and its PV quantiles run from 0.04 to 0.96 — against 0.00 to 0.29
+under the chronological split.
 
 - **Episode length and budget randomisation.** The criterion refers to a whole
   week, but week-long episodes are long and expensive. Chosen solution: episodes
