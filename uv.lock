@@ -237,7 +237,7 @@ name = "cuda-bindings"
 version = "13.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cuda-pathfinder" },
+    { name = "cuda-pathfinder", marker = "python_full_version < '3.15'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/dc/45/57fb37fea9200d854960e36c2181675f92d16bfd7012cc5a95b153e782f0/cuda_bindings-13.4.1-cp311-cp311-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:56c1552e207b291c321cef9952fbfaf8591c2a14d9c6e5215071020f541a04e5", size = 6484208, upload-time = "2026-09-10T01:16:46.069Z" },
@@ -556,6 +556,9 @@ config = [
     { name = "hydra-core" },
     { name = "omegaconf" },
 ]
+env = [
+    { name = "gymnasium" },
+]
 rl = [
     { name = "gymnasium" },
     { name = "sb3-contrib" },
@@ -580,8 +583,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "gymnasium", marker = "extra == 'rl'", specifier = ">=0.29" },
+    { name = "gymnasium", marker = "extra == 'env'", specifier = ">=0.29" },
     { name = "hydra-core", marker = "extra == 'config'", specifier = ">=1.3" },
+    { name = "lvgrid-rl", extras = ["env"], marker = "extra == 'rl'" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "omegaconf", marker = "extra == 'config'", specifier = ">=2.3" },
     { name = "pandapower", marker = "extra == 'sim'", specifier = ">=2.14" },
@@ -592,7 +596,7 @@ requires-dist = [
     { name = "stable-baselines3", marker = "extra == 'rl'", specifier = ">=2.3" },
     { name = "torch", marker = "extra == 'rl'", specifier = ">=2.2" },
 ]
-provides-extras = ["sim", "rl", "config"]
+provides-extras = ["sim", "env", "rl", "config"]
 
 [package.metadata.requires-dev]
 dev = [

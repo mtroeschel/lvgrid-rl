@@ -1270,14 +1270,22 @@ is known to be reachable because P4 holds.
 voltage and the thermal problem. M3 is therefore a complete control problem with a
 genuine cost trade-off, and B2/B3/B4 are real competitors rather than straw men.
 
-*Training step size is a design decision.* At 23 ms per power flow step,
-10⁶ training steps at `sim_dt = 5 min` cost about 6.4 hours of power flow per
-worker. Recommendation: `sim_dt = 10 min` for training — the coarsest step size
-that still represents EN 50160 exactly, one power flow per assessment window,
-halving the cost — with final evaluation at 1 or 5 minutes using the same policy.
-With eight parallel workers a run lands under an hour, which makes sweeps over
-five seeds affordable. Verifying that the 10-minute policy holds up at one minute
-is an M5 deliverable, not an afterthought.
+*Training step size is constrained from two sides, and the intersection is
+narrower than either constraint alone.* EN 50160 requires the simulation step to
+divide ten minutes, giving `{1, 2, 5, 10}`. The source data must also be
+resamplable onto it without a grid offset, and the SimBench series are 15 minutes
+— so 2 and 10 minutes are **not representable** (15/10 = 1.5). That leaves
+`{1, 5}`.
+
+This invalidates the earlier recommendation of `sim_dt = 10 min` for training,
+which was made on the EN 50160 constraint alone. The working configuration is
+therefore `sim_dt = 5 min` with `control_dt = 15 min`, i.e. three power flows per
+decision, and 1 minute for the final evaluation. The compute argument does not go
+away: at 23 ms per power flow, a training budget is best counted in power flows
+rather than control steps. Roughly 2·10⁵ control steps amount to 1.2·10⁶ power
+flows, about eight hours on one worker and an hour across eight. Verifying that
+the 5-minute policy holds up at one minute is an M5 deliverable, not an
+afterthought.
 
 *The evaluation split moves into M3.* The fixed evaluation set is needed as soon
 as the first policy is compared against a baseline, so the week characterisation
