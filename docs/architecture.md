@@ -451,6 +451,7 @@ env/
 ├── actions.py       # ActionMapper (flat / per asset / hierarchical)
 ├── reward.py        # RewardComposer and terms
 ├── episodes.py      # EpisodeSampler
+├── splits.py        # week characterisation, stratified split, embargo
 ├── forecast.py      # forecast error model
 └── wrappers.py      # normalisation, action masking, logging
 ```
@@ -595,12 +596,78 @@ learning. Independently of the reward, the physical KPIs are recorded unweighted
 **the comparison against reference methods is made on KPIs, never on the reward**
 — otherwise the policy whose objective one defined oneself wins trivially.
 
-### 6.5 Episodes
+### 6.5 Episodes and data splits
 
-- **Temporal splits** — `train`: Jan–Sep, `val`: Oct, `test`: Nov–Dec plus curated
-  extreme weeks (highest PV infeed, coldest period with heat pump peak, weekend
-  with high EV coincidence). Splits lie on **week boundaries**, because the
-  assessment interval is a week.
+The split unit is the **week**, because that is the assessment interval of
+EN 50160 and because a standard-conforming pass rate needs complete calendar
+weeks with a zero initial budget.
+
+**Why not a chronological block split.** The obvious design — train on Jan–Sep,
+validate on Oct, test on Nov–Dec — was the original plan and is wrong here.
+Measured on `1-LV-rural1--2-sw` over the 51 complete weeks of 2016:
+
+| | PV energy per week | heat pump energy per week |
+|---|---|---|
+| annual range | 301–12,065 kWh | 27–1,789 kWh |
+| Nov–Dec (8 weeks) | 301–3,831 kWh | 602–1,324 kWh |
+| share of the range covered | **30 %** | 41 % |
+
+The spread is not the decisive part; the position is. The annual PV quantiles of
+those eight test weeks are 0.29 / 0.12 / 0.16 / 0.18 / 0.06 / 0.14 / 0.10 / 0.00
+— **every test week lies below the 30th percentile, and one is the weakest PV week
+of the year.** Since the voltage band violations under `moderate_growth` are
+PV-driven overvoltage, such a test set measures the headline KPI exactly where the
+problem does not occur. The reported pass rate would be high and uninformative.
+
+The usual justification for a chronological split is leakage avoidance plus
+deployment fidelity: adjacent windows are correlated, and forecasting models
+should be trained on the past and applied to the future. This is not a
+forecasting task — the policy is a controller, and the question is whether it
+works in operating situations it has not seen. With a single year of data, a
+chronological split unavoidably confounds "unseen data" with "unseen season", so a
+failure cannot be attributed to either.
+
+**Chosen design: a stratified week split with an embargo.**
+
+1. Each of the 51 weeks is characterised by a feature vector computed from
+   **exogenous quantities only** — PV energy, heat demand, EV coincidence, peak
+   net reverse flow. No controller, no power flow, hence no leakage through the
+   label.
+2. Two axes with three quantile bins each, giving nine strata. Three axes with 27
+   strata would be too fine for 51 weeks.
+3. Weeks are drawn from each stratum proportionally into train, validation and
+   test.
+4. **Embargo:** weeks immediately adjacent to a test week are dropped from
+   training. Weather autocorrelation operates on the scale of days, so adjacent
+   weeks are genuinely similar; this is the standard remedy and costs roughly ten
+   training weeks, which is acceptable.
+
+The split is drawn with a dedicated `split_seed`, the resulting week lists are
+committed to the configuration and carried in the run manifest, so it stays
+identical across runs, agents and baselines.
+
+**Three sets, reported separately.**
+
+- **Test set** (stratified, representative) — the primary KPI.
+- **Stress weeks** (curated: highest PV infeed, coldest period with heat pump
+  peak, weekend with high EV coincidence) — a separate, named set. Blending them
+  into the test aggregate makes the number unreadable: a pass rate of 0.85 could
+  mean "fails on the one extreme week" or "fails everywhere a little".
+- **Held-out month** — one deliberately withheld contiguous month as a harder
+  test of temporal generalisation. The reason: season enters the observation
+  through the sin/cos features, so the agent can condition on it. Under an
+  interleaved split it has seen seasonally similar weeks for every test week, and
+  the generalisation claim is weaker than it sounds. Two numbers answering two
+  different questions.
+
+**From M5 the dilemma dissolves.** WPuQ spans 2018 to 2020, which permits a
+genuine year holdout — train on 2018/19, test on 2020. That is the clean split, in
+which stratification and leakage avoidance no longer conflict. SimBench provides
+only one year, so the stratified split is a workaround here, if a justified one.
+
+Implementation in `env/splits.py`: week characterisation, stratified assignment,
+embargo, and serialisation of the resulting week lists.
+
 - **Episode length and budget randomisation.** The criterion refers to a whole
   week, but week-long episodes are long and expensive. Chosen solution: episodes
   of 2–7 days with a **randomised initial budget** — on reset, the consumed window
@@ -615,8 +682,8 @@ learning. Independently of the reward, the physical KPIs are recorded unweighted
   see the weekly horizon.
 - **Curriculum** (optional) — start at moderate penetration, increase over
   training; a separate sampler implementation so it stays switchable.
-- **Fixed evaluation set** — an immutable list of (start week, scenario seed)
-  pairs against which *all* agents and *all* baselines are evaluated.
+- **Fixed evaluation set** — an immutable list of (week, scenario seed) pairs per
+  set, against which *all* agents and *all* baselines are evaluated.
 - `truncated = True` at the window end; `terminated` only on an irrecoverable
   state (power flow divergence).
 
@@ -1073,6 +1140,11 @@ flow, conservatism cost, violations during training, `certification_time_ms`, an
 for the certified arm the size of the certified operating envelope and the
 falsification search hit count (target zero).
 
+**Reporting by set.** Every KPI is reported per evaluation set — test, stress
+weeks, held-out month — and never aggregated across them. A single blended number
+cannot be read: a pass rate of 0.85 could mean failure on one extreme week or a
+little failure everywhere (§6.5).
+
 **Statistical evaluation.** At least 5, better 10 seeds per configuration.
 Aggregation via **IQM with bootstrap confidence intervals** and performance
 profiles (following `rliable`) rather than mean ± standard deviation: RL
@@ -1118,8 +1190,10 @@ seed:      [1, 2, 3, 4, 5]
 baseline:  [do_nothing, q_u_droop, en14a_dimming, opf_myopic, mpc_oracle]
 ```
 
-Model selection (`best_model`) happens on the **validation** period, reported
-figures on the **test** period. Otherwise the result is optimistically biased.
+Model selection (`best_model`) happens on the **validation weeks**, reported
+figures on the **test weeks**; the stress weeks and the held-out month are
+reported separately and never used for selection (§6.5). Otherwise the result is
+optimistically biased.
 
 ---
 
@@ -1154,7 +1228,7 @@ is known to be reachable because P4 holds.
 | **M0** ✅ | skeleton, core schemas, reproducibility chain, CI, extensibility contract | manifest written, contract tests in place | I3, I7 (null) |
 | **M1** ✅ | data layer: SimBench adapter, UTC time base, resampling, Parquet cache with content hash, reactive power | energy-preserving resampling verified on the real year; cache key sensitive to policies | I6 |
 | **M2** ✅ | grid layer: loader with ZIP repair, power flow engine with hypothetical call, EN 50160 assessment, scenarios, P4 check | uncontrolled annual run per scenario documented; P4 verified; runtime measured | I5 |
-| **M3** | minimal environment: PV curtailment only, flat action space, `pq_budget` features, both constraint terms, `PettingZooAdapter` + equivalence test, baselines B0–B4 with their own parameter search | `check_env` passes; PPO beats B0 and the tuned droop baselines on `en50160_pass_rate` **and** overload integral under `moderate_growth`; single- and multi-agent paths bit-identical | I1, I3 (env), I4, I7 (env) |
+| **M3** | minimal environment: PV curtailment only, flat action space, `pq_budget` features, both constraint terms, `PettingZooAdapter` + equivalence test, baselines B0–B4 with their own parameter search, **stratified week split** (`env/splits.py`) | `check_env` passes; PPO beats B0 and the tuned droop baselines on `en50160_pass_rate` **and** overload integral under `moderate_growth`; single- and multi-agent paths bit-identical; test set covers all nine strata and its PV quantiles span the year | I1, I3 (env), I4, I7 (env) |
 | **M4** | full actuator set: BESS, heat pump (buffer store), EVSE with session model; action mode 2 (per asset type); EV session generation from emobpy, calibrated against ElaadNL | all actuators active in one episode; clipping and comfort violations counted correctly; pure-function dynamics verified per asset type | I2 |
 | **M5** | data extension and forecasts: WPuQ and HTW for 1-minute validation, forecast error model with `perfect` as a special case | identical policy evaluated at `sim_dt = 10` and `sim_dt = 1`; difference reported; forecast leak test passes | — |
 | **M6** | evaluation chain and reference methods B5–B9, KPI engine, statistical aggregation, reports | KPI table RL vs. all baselines including `mpc_oracle`; reproduction test green in CI | — |
@@ -1178,6 +1252,13 @@ halving the cost — with final evaluation at 1 or 5 minutes using the same poli
 With eight parallel workers a run lands under an hour, which makes sweeps over
 five seeds affordable. Verifying that the 10-minute policy holds up at one minute
 is an M5 deliverable, not an afterthought.
+
+*The evaluation split moves into M3.* The fixed evaluation set is needed as soon
+as the first policy is compared against a baseline, so the week characterisation
+and the stratified split are an M3 deliverable rather than part of the later
+evaluation chain. Committing the week lists early also means every milestone from
+M3 onwards reports on the same weeks, which is what makes the numbers comparable
+across the project.
 
 *M5 before M6.* Forecasts and high-resolution data come before the evaluation
 chain, because the reference methods B8/B9 need a forecast interface and because
@@ -1206,6 +1287,7 @@ finished shield, and M9 is additive.
 | D10 | timing of certification | **later, as its own sub-project (M9)**; extensibility secured by **seven tested invariants** | §14 |
 | D11 | working grid and scenario | `1-LV-rural1--2-sw` with `moderate_growth`; extreme cases as declared test scenarios | §4.4 |
 | D12 | language | English throughout, including error messages | `CONTRIBUTING.md` |
+| D13 | evaluation split | **stratified week split with an embargo** instead of a chronological block; stress weeks and a held-out month reported separately | §6.5 |
 
 ### 13.1 What D2 actually costs
 
@@ -1249,6 +1331,13 @@ methodologically harder than it looks. Four points that cost time:
 7. **Measurement infrastructure.** A hard guarantee under realistic sensing needs
    a certified error bound on the state estimate. Which infrastructure may be
    assumed, and is that assumption practically defensible?
+8. **Stratification axes and embargo width.** Two axes with three bins is a
+   compromise forced by having only 51 weeks; which two axes matter most is an
+   empirical question, and the answer may differ between an overvoltage-dominated
+   and an undervoltage-dominated scenario. The one-week embargo is likewise a
+   default rather than a measured value. Both should be revisited once a genuine
+   multi-year holdout is available (M5), at which point the stratification becomes
+   a convenience rather than a necessity.
 
 ---
 
