@@ -44,7 +44,7 @@ jobs:
         # --extra sim: ohne pandas/pandapower/simbench wuerden die Tests der
         # Datenschicht stillschweigend uebersprungen und die CI waere gruen,
         # ohne sie geprueft zu haben.
-        run: uv sync --locked --extra sim
+        run: uv sync --locked --extra sim --extra env
 
       - name: Linting
         run: uv run ruff check src tests
