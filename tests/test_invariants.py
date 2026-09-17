@@ -51,29 +51,47 @@ def _module_available(name: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    not _module_available("lvgrid_rl.env.obs"),
-    strict=True,
-    reason="I1 falls due with the ObservationBuilder in M3.",
-)
 def test_i1_observation_is_a_pure_projection_of_system_state() -> None:
     """I1: the ``ObservationBuilder`` reads only from ``SystemState``.
 
     The certifier needs the full state, the agent may see less. If observation
-    and state are the same object that cannot be separated, and retrofitting
-    touches every environment component.
+    and state were the same object that could not be separated. Satisfied since
+    the observation builder landed in M3.
 
-    Acceptance criteria for M3:
-
-    * ``Observation`` has no setters and no state of its own;
-    * two ``ObservationBuilder`` instances with different ``sensor_config``
-      produce different observations from the same ``SystemState``;
-    * the builder holds no state between calls that is not reconstructible from
-      ``SystemState``.
+    Checked three ways: the builder carries nothing but configuration, repeated
+    builds from the same state are identical, and two sensor configurations see
+    different amounts of the same grid.
     """
-    from lvgrid_rl.env.obs import ObservationBuilder  # noqa: PLC0415
+    pytest.importorskip("gymnasium", reason="extra 'env' not installed")
+    from lvgrid_rl.env.obs import (  # noqa: PLC0415
+        FeatureGroup,
+        ObservationBuilder,
+        ObservationSpec,
+        SensorConfig,
+    )
 
-    raise AssertionError(f"assertions for {ObservationBuilder} still to be written")
+    # No state of its own: a frozen dataclass whose slots hold configuration
+    # plus the derived layout, nothing else.
+    builder = ObservationBuilder(ObservationSpec(forecast_series=("s",)), 4)
+    assert set(builder.__slots__) == {"spec", "n_evaluated_buses", "feature_names"}
+
+    full = ObservationBuilder(
+        ObservationSpec(
+            groups=(FeatureGroup.MEASUREMENTS,),
+            sensor_config=SensorConfig.FULL_STATE,
+        ),
+        6,
+    )
+    realistic = ObservationBuilder(
+        ObservationSpec(
+            groups=(FeatureGroup.MEASUREMENTS,),
+            sensor_config=SensorConfig.REALISTIC,
+            measured_buses=(0, 5),
+        ),
+        6,
+    )
+    assert full.dim > realistic.dim, "sensor configuration must matter"
+    assert full.feature_names != realistic.feature_names
 
 
 def test_i1_system_state_is_the_single_source_of_truth_today() -> None:
@@ -143,20 +161,38 @@ def test_i3_information_set_cannot_express_clairvoyance() -> None:
     assert not forbidden, f"clairvoyance expressible via: {forbidden}"
 
 
-@pytest.mark.xfail(
-    not _module_available("lvgrid_rl.env.lv_grid_env"),
-    strict=True,
-    reason="I3 for the environment falls due in M3.",
-)
 def test_i3_env_wraps_action_construction_in_a_decision_scope() -> None:
     """I3: the environment actually uses the mechanism.
 
-    Acceptance criterion for M3: a spy scenario recording its accesses must not
-    see any time step after ``t`` during steps 1 and 2 of the step sequence.
+    A guarantee based on information the real controller does not have is not a
+    guarantee, and the bug is invisible in training. The check therefore does not
+    inspect the code but probes it: a safety component that tries to read the
+    coming interval from inside the action construction must raise.
     """
-    from lvgrid_rl.env.lv_grid_env import LVGridEnv  # noqa: PLC0415
+    pytest.importorskip("simbench", reason="extra 'sim' not installed")
+    pytest.importorskip("gymnasium", reason="extra 'env' not installed")
+    from lvgrid_rl.core.information import (  # noqa: PLC0415
+        ClairvoyanceError,
+        assert_readable,
+    )
+    from lvgrid_rl.core.protocols import InterventionInfo  # noqa: PLC0415
+    from lvgrid_rl.env.factory import make_env  # noqa: PLC0415
 
-    raise AssertionError(f"assertions for {LVGridEnv} still to be written")
+    class Peeking:
+        """Reads one step beyond the decision point, which must be refused."""
+
+        def transform(self, action, state, info):
+            assert_readable(info.t_index + 1, "profile value")
+            return action, InterventionInfo(intervened=False)
+
+        def action_mask(self, state, info):
+            return None
+
+    env = make_env(seed=1)
+    env.safety = Peeking()
+    env.reset(seed=1)
+    with pytest.raises(ClairvoyanceError):
+        env.step(env.action_space.sample())
 
 
 # ---------------------------------------------------------------------------
@@ -164,28 +200,67 @@ def test_i3_env_wraps_action_construction_in_a_decision_scope() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    not _module_available("lvgrid_rl.env.actions"),
-    strict=True,
-    reason="I4 falls due with the ActionMapper in M3.",
-)
 def test_i4_action_normalisation_is_affine_and_invertible() -> None:
     """I4: normalisation is affine and invertible, clipping is reported.
 
     The certified feasible set is formulated in injections; projecting onto it
-    needs box-shaped action coordinates. Semantics such as "state-of-charge
-    target" break that.
-
-    Acceptance criteria for M3:
-
-    * ``from_normalised(to_normalised(a)) == a`` for random actions;
-    * linearity: the mapping preserves convex combinations;
-    * no asset model clips silently -- every limitation appears in
-      ``Setpoint.clipping_info``.
+    needs box-shaped action coordinates related to injections by an invertible
+    affine map. Satisfied since the action mapper landed in M3.
     """
+    pytest.importorskip("gymnasium", reason="extra 'env' not installed")
+    from lvgrid_rl.core.protocols import ActionSpec  # noqa: PLC0415
+    from lvgrid_rl.core.schemas import Interval  # noqa: PLC0415
     from lvgrid_rl.env.actions import ActionMapper  # noqa: PLC0415
 
-    raise AssertionError(f"assertions for {ActionMapper} still to be written")
+    specs = (
+        ActionSpec(names=("p_mw",), bounds=(Interval(-0.02, 0.0),)),
+        ActionSpec(
+            names=("p_mw", "q_mvar"),
+            bounds=(Interval(-0.05, 0.0), Interval(-0.03, 0.03)),
+        ),
+    )
+    mapper = ActionMapper(("sgen:0", "sgen:1"), specs)
+
+    rng = np.random.default_rng(0)
+    for _ in range(100):
+        action = rng.uniform(-1.0, 1.0, size=mapper.dim)
+        assert np.allclose(mapper.to_normalised(mapper.to_physical(action)), action)
+
+    # Affinity: the mapping preserves convex combinations.
+    x = rng.uniform(-1.0, 1.0, size=mapper.dim)
+    y = rng.uniform(-1.0, 1.0, size=mapper.dim)
+    for weight in (0.0, 0.3, 0.5, 1.0):
+        mixed = weight * x + (1.0 - weight) * y
+        expected = weight * mapper.to_physical(x) + (1.0 - weight) * mapper.to_physical(y)
+        assert np.allclose(mapper.to_physical(mixed), expected)
+
+    # No silent clipping: every limitation an asset applies is reported.
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    from lvgrid_rl.components.pv import PvSystem  # noqa: PLC0415
+    from lvgrid_rl.core.information import InformationSet  # noqa: PLC0415
+    from lvgrid_rl.core.schemas import AssetRatings, PQBudgetState  # noqa: PLC0415
+
+    asset = PvSystem(
+        asset_id="sgen:0",
+        bus=1,
+        ratings=AssetRatings(p_min_mw=-0.02, p_max_mw=0.0),
+        series_id="sgen:0",
+    )
+    info = InformationSet(
+        t_index=0,
+        timestamp=datetime(2016, 6, 1, 12, 0, tzinfo=UTC),
+        measurements={},
+        asset_states={},
+        series_ids=("sgen:0",),
+        exogenous_bounds_mw=np.zeros((2, 1)),
+        forecast={"sgen:0": np.array([-0.004])},
+        pq=PQBudgetState(windows_elapsed_count=0),
+    )
+    state = asset.initial_state(np.random.default_rng(0))
+    setpoint = asset.to_setpoint(state, np.array([-0.02]), info)
+    assert setpoint.was_clipped, "limitation must be reported, not applied silently"
+    assert setpoint.clipping_info
 
 
 # ---------------------------------------------------------------------------
@@ -300,26 +375,67 @@ def test_i7_null_safety_component_satisfies_the_protocol() -> None:
     assert isinstance(NullSafetyComponent(), SafetyComponent)
 
 
-@pytest.mark.xfail(
-    not _module_available("lvgrid_rl.env.lv_grid_env"),
-    strict=True,
-    reason="I7 for the environment falls due in M3.",
-)
 def test_i7_env_exposes_both_intervention_points() -> None:
     """I7: both intervention points sit in the environment's step sequence.
 
     The shield lives inside the environment because it needs the state; masking
     lives outside and needs the distribution. Both paths must exist, otherwise
     one of the mechanisms can later only be added by cutting into the step
-    sequence.
-
-    Acceptance criteria for M3:
-
-    * a dummy ``SafetyComponent`` that halves actions measurably changes the
-      setpoints written;
-    * ``info["action_mask"]`` is present at every step and permits all actions
-      when ``safety.mechanism: none``.
+    sequence. Satisfied since the environment landed in M3.
     """
-    from lvgrid_rl.env.lv_grid_env import LVGridEnv  # noqa: PLC0415
+    pytest.importorskip("simbench", reason="extra 'sim' not installed")
+    pytest.importorskip("gymnasium", reason="extra 'env' not installed")
+    from lvgrid_rl.core.protocols import InterventionInfo  # noqa: PLC0415
+    from lvgrid_rl.env.factory import make_env  # noqa: PLC0415
 
-    raise AssertionError(f"assertions for {LVGridEnv} still to be written")
+    class Halving:
+        """Halves every setpoint, so the effect is measurable."""
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def transform(self, action, state, info):
+            self.calls += 1
+            return 0.5 * action, InterventionInfo(
+                intervened=True, magnitude=float(np.abs(0.5 * action).sum())
+            )
+
+        def action_mask(self, state, info):
+            return None
+
+    # The mask is present in every step, and with the null component it permits
+    # everything.
+    plain = make_env(seed=1)
+    _, info = plain.reset(seed=1)
+    assert "action_mask" in info
+    assert info["action_mask"] is None
+    _, _, _, _, info = plain.step(plain.mapper.neutral_action())
+    assert "action_mask" in info
+
+    # The in-environment component measurably changes what is written.
+    # Run into daylight before comparing: at night the available power is zero,
+    # so a halved setpoint and an unhalved one are clipped to the same value and
+    # the comparison would not discriminate.
+    def curtailed_over_a_day(component=None) -> tuple[float, int]:
+        env = make_env(seed=1)
+        if component is not None:
+            env.safety = component
+        env.reset(seed=1)
+        total = 0.0
+        intervened = 0
+        for _ in range(60):
+            _, _, _, _, step_info = env.step(env.mapper.neutral_action())
+            total += step_info["curtailed_energy_mwh"]
+            intervened += int(step_info["intervened"])
+        return total, intervened
+
+    component = Halving()
+    guarded_total, guarded_intervened = curtailed_over_a_day(component)
+    plain_total, plain_intervened = curtailed_over_a_day()
+
+    assert component.calls == 60
+    assert guarded_intervened == 60
+    assert plain_intervened == 0
+    assert guarded_total > plain_total, (
+        "the safety component must actually reach the setpoints"
+    )

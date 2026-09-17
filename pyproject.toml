@@ -31,16 +31,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# M1 aufwaerts. In M0 absichtlich nicht installiert, damit das Skelett und die
-# Invariantentests ohne schwere Abhaengigkeiten laufen.
+# From M1 onwards. Deliberately not installed in M0, so that the skeleton and the
+# invariant tests run without heavy dependencies.
 sim = [
   "pandas>=2.1",
   "pyarrow>=15",
   "pandapower>=2.14",
   "simbench>=1.6",
 ]
+# Split out from `rl` on purpose: the environment needs only Gymnasium, which is
+# small, whereas `rl` pulls in PyTorch. CI can therefore test the environment
+# without installing a deep learning stack.
+env = ["gymnasium>=0.29"]
 rl = [
-  "gymnasium>=0.29",
+  "lvgrid-rl[env]",
   "stable-baselines3>=2.3",
   "sb3-contrib>=2.3",
   "torch>=2.2",

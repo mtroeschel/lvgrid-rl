@@ -122,6 +122,19 @@ class PandapowerEngine:
             converged=True,
         )
 
+    def reset_warm_start(self) -> None:
+        """Forget the previous solution, so the next solve starts cold.
+
+        Must be called when an episode ends, and this is not cosmetic: the warm
+        start makes a solution depend on the operating point that preceded it.
+        Without this reset, two episodes replayed with the same seed and the same
+        actions converge to slightly different solutions, because the first solve
+        of the second episode starts from wherever the first one ended. Gymnasium's
+        ``check_env`` catches it as non-deterministic step rewards; in a training
+        run it would silently break the reproducibility claim of section 9.2.
+        """
+        self._solved_once = False
+
     # -- PowerFlowEngine protocol ------------------------------------------
 
     def run(self, setpoints: Mapping[str, Setpoint], t_index: int) -> GridState:
