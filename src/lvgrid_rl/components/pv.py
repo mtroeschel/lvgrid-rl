@@ -143,6 +143,33 @@ class PvSystem:
             clipping_info=clipping,
         )
 
+    def apply_availability(self, sp: Setpoint, x: ExogenousInput) -> Setpoint:
+        """Limit a setpoint to the power actually available at this instant.
+
+        This is physics, not control, and therefore lives outside
+        :meth:`to_setpoint`. The distinction matters once ``control_dt`` spans
+        several simulation steps: the controller decides once, from what it knows
+        at the decision point, and that decision is then held for the whole
+        control step. Irradiance does not hold still, so a setpoint formed at the
+        start of the step can exceed what the array can deliver three minutes
+        later -- and writing it unchanged would inject power that does not exist.
+
+        The limitation is not reported as clipping: it is not the controller
+        proposing something inadmissible, it is the weather.
+        """
+        available = float(x.realized_mw[x.series_ids.index(self.series_id)])
+        # Both are negative in the consumer convention, so the physical limit is
+        # the larger (less negative) of the two.
+        limited = max(sp.p_mw, available)
+        if limited == sp.p_mw:
+            return sp
+        return Setpoint(
+            asset_id=sp.asset_id,
+            p_mw=limited,
+            q_mvar=sp.q_mvar,
+            clipping_info=sp.clipping_info,
+        )
+
     def dynamics(
         self,
         s: PvState,
