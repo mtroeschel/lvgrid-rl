@@ -58,23 +58,24 @@ CONNECTION_POINT_TABLES: Final[tuple[str, ...]] = (
 def fix_zip_load_model(net: pandapowerNet) -> int:
     """Fill the ZIP load model columns, returning the number of repaired rows.
 
-    **Why this exists.** simbench 1.6.1 leaves ``const_z_p_percent`` and its
-    three siblings as ``NaN``. pandapower 3.x propagates those NaNs into the
-    Jacobian, which becomes exactly singular, and the Newton-Raphson power flow
-    fails to converge -- for *every* SimBench low-voltage grid, including the
-    trivial base scenario. The failure mode is misleading: pandapower reports
-    "Power Flow nr did not converge", which suggests an infeasible operating
-    point rather than a data defect. The built-in diagnostic blames implausible
-    impedance values, which is a red herring.
-
-    The discriminating observation is that ``fdbx`` and ``fdxb`` converge while
-    ``nr`` does not -- and those two algorithms ignore the voltage-dependent
+    **Why this exists.** simbench up to and including 1.6.1 leaves
+    ``const_z_p_percent`` and its three siblings as ``NaN``. pandapower 3.x
+    propagates those NaNs into the Jacobian, which becomes exactly singular, and
+    the Newton-Raphson power flow fails to converge -- for *every* SimBench
+    low-voltage grid, including the trivial base scenario. The failure mode is
+    misleading: pandapower reports "Power Flow nr did not converge", which
+    suggests an infeasible operating point rather than a data defect, and the
+    built-in diagnostic blames implausible impedance values, which is a red
+    herring. The discriminating observation is that ``fdbx`` and ``fdxb``
+    converge while ``nr`` does not -- and those two ignore the voltage-dependent
     load model.
 
-    Setting the columns to zero means a constant-power load, which is
-    pandapower's own default for a newly created load and matches what SimBench
-    intends. Should a future simbench release fill these columns, this function
-    becomes a no-op because it only touches NaN entries.
+    **Fixed upstream in simbench 1.6.2**, which the project now requires. The
+    function is kept as a compatibility shim: it only touches NaN entries, so it
+    is a no-op on a fixed release, and it keeps the grid loadable for anyone
+    working in an older environment. Setting the columns to zero means a
+    constant-power load, which is pandapower's own default for a newly created
+    load and matches what SimBench intends.
     """
     repaired = 0
     for table in ("load", "asymmetric_load"):

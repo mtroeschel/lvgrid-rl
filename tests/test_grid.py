@@ -53,33 +53,32 @@ def setpoint_factory(model):
 # ---------------------------------------------------------------------------
 
 
-def test_raw_simbench_net_has_undefined_zip_columns() -> None:
-    """Documents the defect this repair exists for.
+def test_zip_columns_are_defined_after_loading(model) -> None:
+    """The invariant, independent of who established it.
 
-    If a future simbench release fills these columns, this test turns red and
-    the repair can be removed -- which is the point of asserting on the defect
-    rather than only on the fix.
+    Up to simbench 1.6.1 these columns arrived as NaN and the repair filled
+    them; from 1.6.2 they arrive defined. Either way the loaded grid must not
+    carry NaNs into the Jacobian.
+    """
+    assert not model.net.load[list(ZIP_COLUMNS)].isna().any().any()
+
+
+def test_the_historical_defect_is_gone(model) -> None:
+    """The canary that told us the upstream fix had landed.
+
+    This test previously asserted the *defect* -- NaN columns and a raw net that
+    does not converge -- precisely so that it would turn red once simbench fixed
+    it. It did, in 1.6.2, which is why the project now requires that version and
+    why `fix_zip_load_model` is a compatibility shim rather than a necessity.
     """
     import simbench as sb
+    from packaging import version
 
-    net = sb.get_simbench_net(CODE)
-    assert net.load[list(ZIP_COLUMNS)].isna().all().all()
-
-
-def test_raw_simbench_net_does_not_converge() -> None:
-    """The failure mode is misleading.
-
-    It looks like an infeasible operating point, but it is a data defect.
-    """
-    import simbench as sb
-
-    net = sb.get_simbench_net(CODE)
-    with pytest.raises(pp.LoadflowNotConverged):
-        pp.runpp(net, numba=False)
+    assert version.parse(sb.__version__) >= version.parse("1.6.2")
+    assert model.zip_rows_repaired == 0, "the shim should have nothing to do"
 
 
-def test_repaired_net_converges(model) -> None:
-    assert model.zip_rows_repaired > 0
+def test_prepared_net_converges(model) -> None:
     pp.runpp(model.net, numba=False)
     assert model.net.converged
 

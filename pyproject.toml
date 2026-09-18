@@ -37,7 +37,12 @@ sim = [
   "pandas>=2.1",
   "pyarrow>=15",
   "pandapower>=2.14",
-  "simbench>=1.6",
+  # >=1.6.2 on purpose: earlier releases leave the ZIP load model columns
+  # undefined, which makes the pandapower 3.x Jacobian singular so that no
+  # low-voltage grid converges, and they suppress a pandas FutureWarning only
+  # for pandas 2.2.x exactly. Both are fixed in 1.6.2. Verified that the data is
+  # unchanged: identical profile content hash, net and connection points.
+  "simbench>=1.6.2",
 ]
 # Split out from `rl` on purpose: the environment needs only Gymnasium, which is
 # small, whereas `rl` pulls in PyTorch. CI can therefore test the environment
