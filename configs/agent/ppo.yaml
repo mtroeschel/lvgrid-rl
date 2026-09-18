@@ -1,0 +1,19 @@
+# Starting configuration for M3. Deliberately close to the Stable-Baselines3
+# defaults: tuning belongs in M7 with Optuna, and a hand-tuned starting point
+# would make the later sweep look better than it is.
+#
+# gamma is absent on purpose. It is derived from control_dt_min, because the
+# EN 50160 criterion spans a week and the effective horizon has to cover it
+# (architecture section 6.5). Putting it here would be rejected by AgentSpec.
+algo: ppo
+policy: MlpPolicy
+hyperparams:
+  n_steps: 512          # per worker; a rollout shorter than an episode is fine
+  batch_size: 128
+  learning_rate: 3.0e-4
+  n_epochs: 10
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.0
+policy_kwargs:
+  net_arch: [256, 256]

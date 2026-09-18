@@ -61,3 +61,28 @@ jobs:
       # erzwingt, den Marker zu entfernen.
       - name: Tests und offene Invarianten
         run: uv run pytest -q -rx
+
+  # Separate job: the rl extra pulls PyTorch and produces a multi-gigabyte
+  # environment. Installing that on every push would slow the main job down for
+  # a layer that changes rarely -- but leaving it out entirely would mean the
+  # agent tests are silently skipped and the build stays green without having
+  # checked them.
+  rl-tests:
+    name: rl
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Installieren
+        run: uv sync --locked --extra sim --extra env --extra rl
+
+      - name: Agententests
+        run: uv run pytest tests/test_agents.py -q -rx
