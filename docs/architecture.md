@@ -1277,6 +1277,13 @@ is known to be reachable because P4 holds.
 voltage and the thermal problem. M3 is therefore a complete control problem with a
 genuine cost trade-off, and B2/B3/B4 are real competitors rather than straw men.
 
+*Measured throughput, M3.* On `1-LV-rural1--2-sw` with four parallel workers,
+PPO collects about **15 control steps per second** — roughly 21 ms per power flow
+and three power flows per decision, plus the rollout overhead. 50,000 control
+steps are therefore around an hour, 200,000 about four. That is the budget a
+single seed costs, so a sweep over five seeds and four agent architectures is a
+question of days rather than hours and needs planning rather than patience.
+
 *Training step size is constrained from two sides, and the intersection is
 narrower than either constraint alone.* EN 50160 requires the simulation step to
 divide ten minutes, giving `{1, 2, 5, 10}`. The source data must also be

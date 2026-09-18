@@ -119,8 +119,20 @@ def run_controller(
     episodes: list[EpisodeResult] = []
     total = n_episodes if n_episodes is not None else env.sampler.n_weeks
 
+    def hand_observation(observation) -> None:
+        """Give the controller the current observation if it wants one.
+
+        Policies consume the observation vector, rule-based methods the
+        information set. The optional hook keeps that difference out of the
+        ``Controller`` signature, which every baseline shares.
+        """
+        setter = getattr(controller, "set_observation", None)
+        if setter is not None:
+            setter(observation)
+
     for index in range(total):
-        _, info = env.reset(seed=seed + index)
+        observation, info = env.reset(seed=seed + index)
+        hand_observation(observation)
         state = env._information_set(env._t, env._last_grid)  # noqa: SLF001
         controller.reset(state)
 
@@ -141,7 +153,8 @@ def run_controller(
             action = controller.act(state)
             decision_ns += time.perf_counter_ns() - started
 
-            _, step_reward, terminated, truncated, step_info = env.step(action)
+            observation, step_reward, terminated, truncated, step_info = env.step(action)
+            hand_observation(observation)
             reward += step_reward
             curtailed += step_info["curtailed_energy_mwh"]
             k95 += step_info["k95_violations"]

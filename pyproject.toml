@@ -48,7 +48,16 @@ rl = [
   "stable-baselines3>=2.3",
   "sb3-contrib>=2.3",
   "torch>=2.2",
+  # Stable-Baselines3 raises rather than degrading when a tensorboard_log
+  # directory is configured without tensorboard installed, so it belongs in the
+  # extra rather than in a "nice to have" list.
+  "tensorboard>=2.16",
 ]
+
+# Note for CPU-only machines: the PyPI torch wheel for Linux bundles the CUDA
+# runtime and pulls several gigabytes of nvidia packages. A CPU-only install is
+# available from the PyTorch index; see
+# https://docs.astral.sh/uv/guides/integration/pytorch/ for the uv configuration.
 config = ["hydra-core>=1.3", "omegaconf>=2.3"]
 
 [project.urls]
