@@ -85,7 +85,14 @@ repos:
         # `uv run --frozen` solves both: it picks the project environment's
         # interpreter and keeps it at the lock file without re-resolving on every
         # commit. It requires `uv` on the PATH, which the project assumes anyway.
-        entry: uv run --frozen python -m pytest -q -rx
+        #
+        # The extras have to be named. `uv run` synchronises the environment only
+        # for the default dependency groups, so packages belonging to an extra
+        # are left at whatever version happens to be installed. A lock file
+        # change to, say, simbench then has no effect and the hook tests an
+        # environment that does not match the lock -- silently, until a
+        # version-sensitive test fails and the cause looks like a broken patch.
+        entry: uv run --frozen --extra sim --extra env python -m pytest -q -rx
         language: system
         types: [python]
         pass_filenames: false

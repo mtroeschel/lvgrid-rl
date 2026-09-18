@@ -70,12 +70,29 @@ def test_the_historical_defect_is_gone(model) -> None:
     does not converge -- precisely so that it would turn red once simbench fixed
     it. It did, in 1.6.2, which is why the project now requires that version and
     why `fix_zip_load_model` is a compatibility shim rather than a necessity.
+
+    It doubles as a check that the installed environment matches the lock file.
+    That is why the failure message names the likely cause: a bare version
+    mismatch reads like a broken patch, when it usually means the environment is
+    stale. `uv run` synchronises only the default dependency groups, so packages
+    from an extra keep whatever version is installed until the extra is named.
     """
     import simbench as sb
     from packaging import version
 
-    assert version.parse(sb.__version__) >= version.parse("1.6.2")
-    assert model.zip_rows_repaired == 0, "the shim should have nothing to do"
+    assert version.parse(sb.__version__) >= version.parse("1.6.2"), (
+        f"simbench {sb.__version__} is installed, but the lock file requires "
+        "1.6.2 or newer. The environment is probably stale rather than the "
+        "change wrong; run\n"
+        "    uv sync --locked --extra sim --extra env\n"
+        "Note that `uv run` alone does not upgrade packages from an extra."
+    )
+    assert model.zip_rows_repaired == 0, (
+        f"The compatibility shim repaired {model.zip_rows_repaired} rows, but "
+        f"simbench {sb.__version__} should fill the ZIP columns itself. Either "
+        "the installed version differs from the lock file, or the upstream fix "
+        "regressed."
+    )
 
 
 def test_prepared_net_converges(model) -> None:
