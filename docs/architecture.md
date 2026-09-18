@@ -260,11 +260,11 @@ grid/
 
 ### 4.1 Loading and the ZIP repair
 
-SimBench grids do **not** converge with pandapower 3.x out of the box — not only
-at development stage 2, but for every low-voltage grid including the trivial
-`--0-no_sw`. simbench 1.6.1 leaves the ZIP load model columns
-(`const_z_p_percent` and its three siblings) as `NaN`; pandapower 3.3.3
-propagates that into the Jacobian, which becomes exactly singular.
+SimBench grids up to and including simbench 1.6.1 do **not** converge with
+pandapower 3.x out of the box — not only at development stage 2, but for every
+low-voltage grid including the trivial `--0-no_sw`. Those releases leave the ZIP
+load model columns (`const_z_p_percent` and its three siblings) as `NaN`;
+pandapower 3.3.3 propagates that into the Jacobian, which becomes exactly singular.
 
 The failure mode is misleading. pandapower reports "Power Flow nr did not
 converge", which suggests an infeasible operating point, and `pp.diagnostic`
@@ -273,9 +273,19 @@ herrings. The discriminating observation is that `fdbx` and `fdxb` converge whil
 `nr` does not, and those two ignore the voltage-dependent load model.
 
 `fix_zip_load_model()` fills the columns with zero, which means a constant-power
-load — pandapower's own default for a new load. Two tests guard this: one asserts
-the defect itself, so it turns red once simbench fills the columns and the repair
-can be removed; one asserts the repair is idempotent.
+load — pandapower's own default for a new load.
+
+**The canary worked.** One of the two tests asserted the *defect* rather than the
+fix, precisely so that it would turn red once simbench filled the columns. It did:
+**simbench 1.6.2 fixes it**, the raw grid converges again, and the project now
+requires that version. The repair is kept as a compatibility shim — it only
+touches NaN entries, so it is a no-op on a fixed release — and the test now
+asserts the invariant (no NaNs reach the Jacobian) plus the historical note.
+
+The upgrade was verified not to change the data: identical profile content hash,
+identical grid, identical connection points. The cache *key* changed, because the
+source version enters it, while the content hash did not — which is exactly the
+distinction section 3.1 draws between keying and content verification.
 
 ### 4.2 Connection points
 
