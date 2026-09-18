@@ -91,8 +91,11 @@ To check the whole tree, for instance after cloning or after an `autoupdate`:
 uv run pre-commit run --all-files
 ```
 
-The test hook invokes `uv run --frozen python -m pytest` and therefore requires
-`uv` on the PATH. Git hooks run with the PATH of the invoking terminal, not
+The test hook invokes `uv run --frozen --extra sim --extra env python -m pytest`
+and therefore requires `uv` on the PATH. The extras must be named: `uv run`
+synchronises the environment only for the default dependency groups, so packages
+belonging to an extra stay at whatever version is installed. A lock file change
+to one of them would then have no effect on what the hook actually tests. Git hooks run with the PATH of the invoking terminal, not
 inside the activated `.venv`. Calling `pytest` directly would hit a script from
 the system PATH, and calling `python -m pytest` fails on systems that only have
 `python3`, with "Executable `python` not found". If you work without uv, skip
