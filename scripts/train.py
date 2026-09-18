@@ -45,6 +45,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--eval-episodes", type=int, default=2)
     parser.add_argument("--eval-days", type=int, default=2)
     parser.add_argument(
+        "--tuned",
+        type=Path,
+        default=Path("configs/baseline/tuned.json"),
+        help="tuned baseline parameters from scripts/tune_baselines.py",
+    )
+    parser.add_argument(
+        "--allow-untuned",
+        action="store_true",
+        help="compare against default baseline parameters. Only for smoke runs: "
+        "the results are not admissible as evidence, and the controllers are "
+        "labelled accordingly in the table.",
+    )
+    parser.add_argument(
         "--n-steps",
         type=int,
         default=None,
@@ -54,11 +67,50 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def load_baseline_params(path: Path, allow_untuned: bool) -> tuple[dict, bool]:
+    """Load the tuned baseline parameters.
+
+    Falling back to defaults when the file is missing would be the worst of both
+    worlds: the run would look like a comparison against tuned references and
+    would not be one. The deadbands and slopes of the droop methods are designed
+    for a hard band, and under the percentile criterion the optimum is different
+    -- comparing against the untuned settings is how an agent wins against a
+    deliberately weak reference (architecture section 6.6, consequence 5).
+
+    Raises:
+        FileNotFoundError: if the file is missing and ``allow_untuned`` is not
+            set.
+    """
+    if path.exists():
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return payload["results"], True
+    if not allow_untuned:
+        raise FileNotFoundError(
+            f"No tuned baseline parameters at {path}. Run\n"
+            "    uv run python scripts/tune_baselines.py\n"
+            "first, or pass --allow-untuned for a smoke run whose baseline "
+            "comparison is not admissible as evidence."
+        )
+    return (
+        {
+            "fixed_cap": {"params": {"cap": 0.5}},
+            "p_u_droop": {"params": {"v_start": 1.04, "v_max": 1.10}},
+        },
+        False,
+    )
+
+
 def main() -> None:
     """Train, evaluate against the tuned baselines, and write the run directory."""
     args = build_parser().parse_args()
 
     from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+
+    # Loaded before training: a missing tuning run must fail in seconds, not
+    # after four hours of compute.
+    tuned, is_tuned = load_baseline_params(args.tuned, args.allow_untuned)
+    if not is_tuned:
+        print("WARNING: comparing against untuned baselines; not admissible.\n")
 
     config = EnvConfig()
     timebase = TimeBase(config.sim_dt_min, config.control_dt_min)
@@ -127,12 +179,18 @@ def main() -> None:
         make_env(code=args.code, scenario=args.scenario, set_name="val")
     )
 
+    cap = tuned["fixed_cap"]["params"]["cap"]
+    droop = tuned["p_u_droop"]["params"]
+    suffix = "" if is_tuned else " (UNTUNED)"
+
     rows = []
     controllers = {
         "policy": lambda e: PolicyController(model),
         "do_nothing": lambda e: DoNothing(e.mapper),
-        "fixed_cap_0.5": lambda e: FixedCap(e.mapper, cap=0.5),
-        "p_u_droop": lambda e: PUDroop(e.mapper, positions, 1.04, 1.10),
+        f"fixed_cap({cap}){suffix}": lambda e: FixedCap(e.mapper, cap=cap),
+        f"p_u_droop({droop['v_start']}/{droop['v_max']}){suffix}": lambda e: PUDroop(
+            e.mapper, positions, droop["v_start"], droop["v_max"]
+        ),
     }
     for name, build in controllers.items():
         env = make_env(
@@ -162,7 +220,19 @@ def main() -> None:
 
     (run_dir / "eval").mkdir(parents=True, exist_ok=True)
     (run_dir / "eval" / "summary.json").write_text(
-        json.dumps(rows, indent=2, sort_keys=True), encoding="utf-8"
+        json.dumps(
+            {
+                "baselines_tuned": is_tuned,
+                "baseline_params": tuned,
+                "eval_set": "val",
+                "eval_episodes": args.eval_episodes,
+                "eval_days": args.eval_days,
+                "results": rows,
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
     )
     print(f"\nwritten: {run_dir}")
 

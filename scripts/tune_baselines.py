@@ -43,8 +43,20 @@ def _score(summary: dict) -> tuple[float, float]:
 def main() -> None:
     """Search the parameter grids and write the best settings."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--weeks", type=int, default=2, help="validation weeks to use")
-    parser.add_argument("--days", type=int, default=2, help="days per episode")
+    parser.add_argument(
+        "--weeks",
+        type=int,
+        default=4,
+        help="validation episodes to average over; too few and the search picks "
+        "a setting that happened to suit one week",
+    )
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=3,
+        help="days per episode. The grid has 27 settings, so the whole search "
+        "costs roughly weeks * days * 96 * 27 control steps",
+    )
     parser.add_argument("--out", type=Path, default=Path("configs/baseline/tuned.json"))
     parser.add_argument("--pv-mode", default="p_only", choices=("p_only", "pq"))
     args = parser.parse_args()

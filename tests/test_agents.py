@@ -135,3 +135,57 @@ def test_runner_hands_observations_to_controllers_that_want_them() -> None:
     run_controller(env, controller, "stub", "stress", n_episodes=1, seed=1)
     assert len(model.seen) > 1
     assert model.seen[0].shape == env.observation_space.shape
+
+
+# ---------------------------------------------------------------------------
+# Baseline parameters for the comparison
+# ---------------------------------------------------------------------------
+
+
+def test_missing_tuned_parameters_stop_the_run() -> None:
+    """Falling back to defaults would be the worst of both worlds.
+
+    The run would look like a comparison against tuned references and would not
+    be one -- which is exactly how an agent wins against a deliberately weak
+    baseline (architecture section 6.6, consequence 5).
+    """
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from train import load_baseline_params
+
+    with pytest.raises(FileNotFoundError, match="tune_baselines"):
+        load_baseline_params(Path("does/not/exist.json"), allow_untuned=False)
+
+
+def test_untuned_comparison_must_be_asked_for_explicitly() -> None:
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from train import load_baseline_params
+
+    params, is_tuned = load_baseline_params(
+        Path("does/not/exist.json"), allow_untuned=True
+    )
+    assert is_tuned is False
+    assert "fixed_cap" in params
+
+
+def test_tuned_parameters_are_used_when_present(tmp_path) -> None:
+    import json
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from train import load_baseline_params
+
+    path = tmp_path / "tuned.json"
+    path.write_text(
+        json.dumps({"results": {"fixed_cap": {"params": {"cap": 0.42}}}}),
+        encoding="utf-8",
+    )
+    params, is_tuned = load_baseline_params(path, allow_untuned=False)
+    assert is_tuned is True
+    assert params["fixed_cap"]["params"]["cap"] == 0.42
