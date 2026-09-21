@@ -116,6 +116,7 @@ class LVGridEnv(gym.Env):
         profiles: np.ndarray,
         series_ids: Sequence[str],
         timestamps: Sequence[Any],
+        profiles_index: Any,
         uncontrolled: Mapping[str, np.ndarray],
         sampler: EpisodeSampler,
         config: EnvConfig | None = None,
@@ -130,6 +131,9 @@ class LVGridEnv(gym.Env):
         self.series_ids = tuple(series_ids)
         self._profiles = profiles
         self._timestamps = timestamps
+        # Kept for tests and for tooling that needs to resolve weeks to steps
+        # without rebuilding the profile frame.
+        self._profiles_index = profiles_index
         self._uncontrolled = dict(uncontrolled)
 
         self.engine = PandapowerEngine(model)

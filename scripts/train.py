@@ -42,8 +42,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--code", default="1-LV-rural1--2-sw")
     parser.add_argument("--scenario", default="moderate_growth")
     parser.add_argument("--run-dir", type=Path, default=Path("results/m3"))
-    parser.add_argument("--eval-episodes", type=int, default=2)
-    parser.add_argument("--eval-days", type=int, default=2)
+    parser.add_argument(
+        "--eval-set",
+        default="val",
+        choices=("val", "test"),
+        help="set for the report at the end of training. The acceptance figure "
+        "belongs on the test weeks and is produced by scripts/evaluate.py, so "
+        "that a policy need not be retrained to be assessed on another set.",
+    )
     parser.add_argument(
         "--tuned",
         type=Path,
@@ -104,7 +110,11 @@ def main() -> None:
     """Train, evaluate against the tuned baselines, and write the run directory."""
     args = build_parser().parse_args()
 
-    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+    from stable_baselines3.common.vec_env import (
+        DummyVecEnv,
+        SubprocVecEnv,
+        VecMonitor,
+    )
 
     # Loaded before training: a missing tuning run must fail in seconds, not
     # after four hours of compute.
@@ -133,9 +143,6 @@ def main() -> None:
 
         return factory
 
-    vec_cls = SubprocVecEnv if args.workers > 1 else DummyVecEnv
-    vec_env = vec_cls([make_worker(i) for i in range(args.workers)])
-
     manifest = RunManifest.create(
         config={
             "algo": args.algo,
@@ -145,6 +152,7 @@ def main() -> None:
             "workers": args.workers,
             "sim_dt_min": config.sim_dt_min,
             "control_dt_min": config.control_dt_min,
+            "eval_set": args.eval_set,
         },
         data_manifest_hash="simbench-builtin",
         base_seed=args.seed,
@@ -152,6 +160,15 @@ def main() -> None:
     )
     run_dir = args.run_dir / manifest.run_id
     manifest.write(run_dir)
+
+    vec_cls = SubprocVecEnv if args.workers > 1 else DummyVecEnv
+    # VecMonitor is not optional: without it Stable-Baselines3 logs no episode
+    # return at all, so `rollout/ep_rew_mean` is missing from TensorBoard and
+    # there is no way to tell whether training converged or was cut short.
+    vec_env = VecMonitor(
+        vec_cls([make_worker(i) for i in range(args.workers)]),
+        filename=str(run_dir / "monitor"),
+    )
 
     hyperparams: dict[str, int] = {}
     if args.n_steps is not None:
@@ -172,11 +189,14 @@ def main() -> None:
     print(f"trained  {args.steps} steps in {elapsed / 60:.1f} min")
 
     # Evaluate the policy and the baselines on exactly the same episodes.
-    eval_spec = EpisodeSpec(
-        mode=EpisodeMode.TRAIN, length_days=args.eval_days, randomise_budget=False
-    )
+    # Complete calendar weeks, fixed order, zero budget. The previous setting
+    # sampled episodes with replacement from the set, so every seed evaluated on
+    # a different selection of weeks -- which made the baselines differ between
+    # runs although they are deterministic, and made cross-seed aggregation
+    # meaningless.
+    eval_spec = EpisodeSpec(mode=EpisodeMode.EVALUATE, randomise_budget=False)
     positions = asset_bus_positions(
-        make_env(code=args.code, scenario=args.scenario, set_name="val")
+        make_env(code=args.code, scenario=args.scenario, set_name=args.eval_set)
     )
 
     cap = tuned["fixed_cap"]["params"]["cap"]
@@ -196,26 +216,27 @@ def main() -> None:
         env = make_env(
             code=args.code,
             scenario=args.scenario,
-            set_name="val",
+            set_name=args.eval_set,
             config=config,
             episode_spec=eval_spec,
             seed=seeds.eval,
         )
-        result = run_controller(
-            env, build(env), name, "val", n_episodes=args.eval_episodes, seed=seeds.eval
-        )
+        # n_episodes defaults to one per week in the set, which is the
+        # standard-conforming choice.
+        result = run_controller(env, build(env), name, args.eval_set, seed=seeds.eval)
         rows.append(result.summary())
 
     header = (
-        f"{'controller':16s} {'reward':>10s} {'curtailed MWh':>14s} "
-        f"{'k95':>6s} {'overload':>9s}"
+        f"{'controller':24s} {'pass rate':>10s} {'k95':>6s} "
+        f"{'overload':>10s} {'curtailed MWh':>14s}"
     )
     print("\n" + header)
     print("-" * len(header))
     for row in rows:
         print(
-            f"{row['controller']:16s} {row['reward']:10.2f} {row['curtailed_mwh']:14.4f} "
-            f"{row['k95_windows']:6.0f} {row['overload_cost']:9.3f}"
+            f"{row['controller']:24s} {row['pass_rate']:10.4f} "
+            f"{row['k95_windows']:6.0f} {row['overload_cost']:10.3f} "
+            f"{row['curtailed_mwh']:14.4f}"
         )
 
     (run_dir / "eval").mkdir(parents=True, exist_ok=True)
@@ -224,9 +245,8 @@ def main() -> None:
             {
                 "baselines_tuned": is_tuned,
                 "baseline_params": tuned,
-                "eval_set": "val",
-                "eval_episodes": args.eval_episodes,
-                "eval_days": args.eval_days,
+                "eval_set": args.eval_set,
+                "episode_mode": "evaluate",
                 "results": rows,
             },
             indent=2,

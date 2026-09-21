@@ -1,0 +1,23 @@
+{
+  "days_per_episode": 3,
+  "note": "Tuned on the validation weeks with a lexicographic objective: violating assessment windows first, curtailed energy second.",
+  "pv_mode": "p_only",
+  "results": {
+    "fixed_cap": {
+      "curtailed": 0.4847573700421499,
+      "k95": 0.0,
+      "params": {
+        "cap": 0.4
+      }
+    },
+    "p_u_droop": {
+      "curtailed": 0.3197052615135946,
+      "k95": 0.0,
+      "params": {
+        "v_max": 1.12,
+        "v_start": 1.06
+      }
+    }
+  },
+  "weeks": 4
+}
