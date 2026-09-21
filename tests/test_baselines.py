@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -236,3 +238,94 @@ def test_every_controller_sees_the_same_episodes(env) -> None:
         )
         weeks.append(result.episodes[0].week)
     assert weeks[0] == weeks[1]
+
+
+# ---------------------------------------------------------------------------
+# EN 50160 pass rate and evaluation episodes
+# ---------------------------------------------------------------------------
+
+
+def test_runner_reports_the_standard_conforming_pass_rate() -> None:
+    """The headline KPI, computed per (bus, week) pair.
+
+    The runner previously reported only the summed violating windows, which is
+    not what the acceptance criterion asks for: a grid in which one feeder end
+    fails every week is not "mostly compliant".
+    """
+    from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
+    from lvgrid_rl.env.factory import make_env
+    from lvgrid_rl.eval.runner import run_controller
+
+    spec = EpisodeSpec(mode=EpisodeMode.TRAIN, length_days=1, randomise_budget=False)
+    env = make_env(seed=1, episode_spec=spec, set_name="stress")
+    result = run_controller(
+        env, DoNothing(env.mapper), "do_nothing", "stress", n_episodes=1, seed=1
+    )
+    episode = result.episodes[0]
+    assert episode.buses_total == env.model.n_evaluated_buses
+    assert 0 <= episode.buses_passed <= episode.buses_total
+    assert result.pass_rate() == pytest.approx(episode.buses_passed / episode.buses_total)
+    assert "pass_rate" in result.summary()
+
+
+def test_evaluate_mode_visits_every_week_exactly_once(env) -> None:
+    """Sampled episodes are not comparable across seeds.
+
+    With ``EpisodeMode.TRAIN`` the episodes are drawn with replacement from the
+    set, so a different seed evaluates on a different selection of weeks. That
+    made deterministic baselines differ between training runs and made
+    cross-seed aggregation meaningless.
+
+    Checked on the sampler rather than through the runner: the property lives
+    there, and a full week per controller costs minutes of power flow.
+    """
+    import numpy as np
+
+    from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSampler, EpisodeSpec
+    from lvgrid_rl.env.splits import WeekSplit
+
+    split = WeekSplit.from_json(
+        Path("configs/split/1-LV-rural1--2-sw.json").read_text(encoding="utf-8")
+    )
+
+    def weeks_for(seed: int) -> list[tuple[int, int]]:
+        sampler = EpisodeSampler(
+            split=split,
+            set_name="stress",
+            index=env._profiles_index,
+            steps_per_day=24 * 60 // env.config.sim_dt_min,
+            n_buses=env.model.n_evaluated_buses,
+            budget_windows=50,
+            spec=EpisodeSpec(mode=EpisodeMode.EVALUATE, randomise_budget=False),
+        )
+        rng = np.random.default_rng(seed)
+        return [sampler.sample(rng).week for _ in range(sampler.n_weeks)]
+
+    first, second = weeks_for(1), weeks_for(99)
+    assert len(first) == len(set(first)), "a week appears twice"
+    assert first == second, "the episode set must not depend on the seed"
+
+
+def test_evaluate_episodes_are_complete_weeks(env) -> None:
+    """Required for the pass rate to be standard-conforming."""
+    import numpy as np
+
+    from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSampler, EpisodeSpec
+    from lvgrid_rl.env.splits import WeekSplit
+
+    split = WeekSplit.from_json(
+        Path("configs/split/1-LV-rural1--2-sw.json").read_text(encoding="utf-8")
+    )
+    sampler = EpisodeSampler(
+        split=split,
+        set_name="stress",
+        index=env._profiles_index,
+        steps_per_day=24 * 60 // env.config.sim_dt_min,
+        n_buses=env.model.n_evaluated_buses,
+        budget_windows=50,
+        spec=EpisodeSpec(mode=EpisodeMode.EVALUATE, randomise_budget=False),
+    )
+    episode = sampler.sample(np.random.default_rng(0))
+    steps_per_week = 7 * 24 * 60 // env.config.sim_dt_min
+    assert episode.n_steps == steps_per_week
+    assert int(episode.initial_k95_violations.sum()) == 0, "budget must start at zero"

@@ -42,6 +42,9 @@ class EpisodeResult:
     curtailed_energy_mwh: float
     k95_violating_windows: int
     k100_violating_windows: int
+    buses_passed: int
+    """Assessed connection points satisfying K95 *and* K100 in this week."""
+    buses_total: int
     overload_cost: float
     diverged_steps: int
     clipped_steps: int
@@ -69,12 +72,26 @@ class RunResult:
         """Mean of one field over all episodes."""
         return self.total(field) / max(self.n_episodes, 1)
 
+    def pass_rate(self) -> float:
+        """Share of (bus, week) pairs satisfying K95 and K100 -- the headline KPI.
+
+        Standard-conforming only when the episodes are complete calendar weeks
+        starting from a zero budget, which is what ``EpisodeMode.EVALUATE``
+        produces. Computed per bus and week rather than per week alone: a grid in
+        which one feeder end fails every week is not "mostly compliant".
+        """
+        total = sum(e.buses_total for e in self.episodes)
+        if total == 0:
+            return float("nan")
+        return sum(e.buses_passed for e in self.episodes) / total
+
     def summary(self) -> dict[str, float | str]:
         """Flat summary for a results table."""
         return {
             "controller": self.controller,
             "set": self.set_name,
             "episodes": self.n_episodes,
+            "pass_rate": self.pass_rate(),
             "reward": self.total("reward"),
             "curtailed_mwh": self.total("curtailed_energy_mwh"),
             "k95_windows": self.total("k95_violating_windows"),
@@ -166,10 +183,22 @@ def run_controller(
             if terminated or truncated:
                 break
 
+        # Per-bus budget state at the end of the episode. With EVALUATE episodes
+        # -- complete weeks from a zero budget -- this is the standard-conforming
+        # assessment; with sampled training episodes it is only indicative.
+        budget = env.aggregator.state()
+        k95_per_bus = np.asarray(budget.violations_k95_count)
+        k100_per_bus = np.asarray(budget.violations_k100_count)
+        passed = int(
+            ((k95_per_bus <= env.aggregator.budget_windows) & (k100_per_bus == 0)).sum()
+        )
+
         episodes.append(
             EpisodeResult(
                 week=week,
                 steps=steps,
+                buses_passed=passed,
+                buses_total=int(k95_per_bus.size),
                 reward=reward,
                 curtailed_energy_mwh=curtailed,
                 k95_violating_windows=k95,

@@ -140,6 +140,7 @@ def make_env(
         profiles=frame.to_numpy(),
         series_ids=series_ids,
         timestamps=list(frame.index.to_pydatetime()),
+        profiles_index=frame.index,
         uncontrolled=uncontrolled,
         sampler=sampler,
         config=config,

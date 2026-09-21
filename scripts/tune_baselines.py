@@ -32,7 +32,16 @@ from lvgrid_rl.eval.runner import run_controller
 
 CAPS = (0.3, 0.4, 0.5, 0.6, 0.7, 0.8)
 V_STARTS = (1.01, 1.02, 1.03, 1.04, 1.05, 1.06, 1.07)
-V_SPANS = (0.02, 0.04, 0.06)
+V_SPANS = (0.02, 0.03, 0.04, 0.06)
+V_MAX_LIMIT = 1.10
+"""Upper bound of the K95 band.
+
+Combinations whose ``v_max`` lies above it are skipped. A characteristic that
+only reaches full curtailment beyond the admissible band cannot hold the band --
+the first search picked ``v_max = 1.12`` precisely because the lexicographic
+objective saw no violations on the tuning episodes and then minimised
+curtailment, which rewards the weakest possible intervention.
+"""
 
 
 def _score(summary: dict) -> tuple[float, float]:
@@ -72,6 +81,11 @@ def main() -> None:
     results: dict[str, dict] = {}
 
     print(f"{'method':22s} {'k95':>6s} {'curtailed MWh':>14s}")
+    print(
+        "Objective: violating windows first, curtailed energy second. If every "
+        "setting scores zero violations, the episodes did not challenge the "
+        "search and the result is noise -- raise --weeks and --days."
+    )
     print("-" * 46)
 
     best: tuple[tuple[float, float], dict] | None = None
@@ -98,6 +112,8 @@ def main() -> None:
         best = None
         for v_start in V_STARTS:
             for span in V_SPANS:
+                if round(v_start + span, 3) > V_MAX_LIMIT:
+                    continue
                 env = build()
                 controller = factory(env, v_start, v_start + span)
                 summary = run_controller(
