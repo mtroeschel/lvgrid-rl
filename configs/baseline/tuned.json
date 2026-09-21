@@ -4,20 +4,20 @@
   "pv_mode": "p_only",
   "results": {
     "fixed_cap": {
-      "curtailed": 0.4847573700421499,
+      "curtailed": 0.9046795317556624,
       "k95": 0.0,
       "params": {
         "cap": 0.4
       }
     },
     "p_u_droop": {
-      "curtailed": 0.3197052615135946,
+      "curtailed": 0.9842453946764501,
       "k95": 0.0,
       "params": {
-        "v_max": 1.12,
-        "v_start": 1.06
+        "v_max": 1.1,
+        "v_start": 1.04
       }
     }
   },
-  "weeks": 4
+  "weeks": 8
 }
