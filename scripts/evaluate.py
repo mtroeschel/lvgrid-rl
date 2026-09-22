@@ -61,6 +61,21 @@ def main() -> None:
     parser.add_argument("--algo", default="ppo")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
+        "--policy-only",
+        action="store_true",
+        help="skip the reference methods. They are deterministic and see the "
+        "same episodes in every run, so their numbers are identical across "
+        "seeds -- recomputing them per seed costs about 80 minutes each.",
+    )
+    parser.add_argument(
+        "--baselines-from",
+        type=Path,
+        default=None,
+        help="an earlier result file for the same set whose baseline rows are "
+        "merged into the output, so a policy-only run still produces a complete "
+        "comparison table.",
+    )
+    parser.add_argument(
         "--out",
         type=Path,
         default=None,
@@ -96,15 +111,18 @@ def main() -> None:
         )
 
     positions = asset_bus_positions(build())
-    controllers = {
-        "policy": lambda e: PolicyController(model),
-        "do_nothing": lambda e: DoNothing(e.mapper),
-        "random": lambda e: RandomController(e.mapper, seed=args.seed),
-        f"fixed_cap({cap})": lambda e: FixedCap(e.mapper, cap=cap),
-        f"p_u_droop({droop['v_start']}/{droop['v_max']})": lambda e: PUDroop(
-            e.mapper, positions, droop["v_start"], droop["v_max"]
-        ),
-    }
+    controllers = {"policy": lambda e: PolicyController(model)}
+    if not args.policy_only:
+        controllers.update(
+            {
+                "do_nothing": lambda e: DoNothing(e.mapper),
+                "random": lambda e: RandomController(e.mapper, seed=args.seed),
+                f"fixed_cap({cap})": lambda e: FixedCap(e.mapper, cap=cap),
+                f"p_u_droop({droop['v_start']}/{droop['v_max']})": lambda e: PUDroop(
+                    e.mapper, positions, droop["v_start"], droop["v_max"]
+                ),
+            }
+        )
 
     rows = []
     for name, build_controller in controllers.items():
@@ -113,6 +131,15 @@ def main() -> None:
             env, build_controller(env), name, args.set_name, seed=args.seed
         )
         rows.append(result.summary())
+
+    if args.baselines_from is not None:
+        earlier = json.loads(args.baselines_from.read_text(encoding="utf-8"))
+        if earlier.get("set") != args.set_name:
+            raise ValueError(
+                f"{args.baselines_from} holds results for set "
+                f"{earlier.get('set')!r}, not {args.set_name!r}"
+            )
+        rows.extend(r for r in earlier["results"] if r["controller"] != "policy")
 
     header = (
         f"{'controller':24s} {'pass rate':>10s} {'k95':>6s} {'k100':>6s} "
