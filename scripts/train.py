@@ -29,6 +29,7 @@ from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
 from lvgrid_rl.env.factory import make_env
 from lvgrid_rl.env.lv_grid_env import EnvConfig
 from lvgrid_rl.eval.runner import run_controller
+from lvgrid_rl.experiment.callbacks import TrainingProgress
 from lvgrid_rl.experiment.reproducibility import RunManifest, SeedSet
 
 
@@ -62,6 +63,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="compare against default baseline parameters. Only for smoke runs: "
         "the results are not admissible as evidence, and the controllers are "
         "labelled accordingly in the table.",
+    )
+    parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="suppress the progress display. It writes to stderr, so a "
+        "redirected stdout keeps only the results table either way.",
+    )
+    parser.add_argument(
+        "--progress-interval",
+        type=float,
+        default=10.0,
+        help="seconds between progress updates",
     )
     parser.add_argument(
         "--n-steps",
@@ -181,8 +194,13 @@ def main() -> None:
     print(f"gamma    {model.gamma:.5f} (derived from control_dt)")
     print(f"workers  {args.workers}, steps {args.steps}")
 
+    callback = (
+        None
+        if args.no_progress
+        else TrainingProgress(args.steps, interval_s=args.progress_interval)
+    )
     started = time.perf_counter()
-    model.learn(total_timesteps=args.steps, progress_bar=False)
+    model.learn(total_timesteps=args.steps, progress_bar=False, callback=callback)
     elapsed = time.perf_counter() - started
     model.save(run_dir / "checkpoints" / "final")
     vec_env.close()
