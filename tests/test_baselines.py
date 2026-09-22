@@ -329,3 +329,106 @@ def test_evaluate_episodes_are_complete_weeks(env) -> None:
     steps_per_week = 7 * 24 * 60 // env.config.sim_dt_min
     assert episode.n_steps == steps_per_week
     assert int(episode.initial_k95_violations.sum()) == 0, "budget must start at zero"
+
+
+# ---------------------------------------------------------------------------
+# Pareto comparison
+# ---------------------------------------------------------------------------
+
+
+def _pareto_module():
+    import sys
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "scripts"))
+    import pareto
+
+    return pareto
+
+
+def test_domination_requires_being_no_worse_on_both_costs() -> None:
+    """Both axes are costs, so lower is better on both."""
+    pareto = _pareto_module()
+    cheap = pareto.Point("a", "fixed_cap", 1.0, 10.0, 1.0)
+    dearer = pareto.Point("b", "fixed_cap", 2.0, 20.0, 1.0)
+    trade = pareto.Point("c", "policy", 5.0, 1.0, 1.0)
+
+    assert cheap.dominates(dearer)
+    assert not dearer.dominates(cheap)
+    # A genuine trade-off dominates nothing and is dominated by nothing.
+    assert not cheap.dominates(trade)
+    assert not trade.dominates(cheap)
+
+
+def test_equal_points_do_not_dominate_each_other() -> None:
+    """Otherwise an arbitrary one would drop off the front."""
+    pareto = _pareto_module()
+    a = pareto.Point("a", "fixed_cap", 1.0, 10.0, 1.0)
+    b = pareto.Point("b", "policy", 1.0, 10.0, 1.0)
+    assert not a.dominates(b)
+    assert not b.dominates(a)
+
+
+def test_front_keeps_the_trade_offs_and_drops_the_dominated() -> None:
+    pareto = _pareto_module()
+    points = [
+        pareto.Point("nothing", "reference", 0.0, 100.0, 0.9),
+        pareto.Point("cap_loose", "fixed_cap", 3.0, 80.0, 1.0),
+        pareto.Point("cap_waste", "fixed_cap", 9.0, 90.0, 1.0),  # dominated
+        pareto.Point("policy", "policy", 8.0, 5.0, 1.0),
+    ]
+    labels = [p.label for p in pareto.pareto_front(points)]
+    assert "cap_waste" not in labels
+    assert {"nothing", "cap_loose", "policy"} == set(labels)
+    assert labels == sorted(
+        labels, key=lambda name: {"nothing": 0.0, "cap_loose": 3.0, "policy": 8.0}[name]
+    )
+
+
+def test_policy_points_from_a_different_set_are_rejected(tmp_path) -> None:
+    """Results from another set are rejected.
+
+    Mixing sets on one plane would be meaningless, and a glob makes the mistake
+    easy.
+    """
+    import json
+
+    pareto = _pareto_module()
+    path = tmp_path / "val.json"
+    path.write_text(json.dumps({"set": "val", "results": []}), encoding="utf-8")
+    with pytest.raises(ValueError, match="not 'test'"):
+        pareto.load_policy_points([path], "test")
+
+
+def test_policy_points_are_read_from_existing_results(tmp_path) -> None:
+    import json
+
+    pareto = _pareto_module()
+    run = tmp_path / "run" / "eval"
+    run.mkdir(parents=True)
+    path = run / "test.json"
+    path.write_text(
+        json.dumps(
+            {
+                "set": "test",
+                "results": [
+                    {
+                        "controller": "policy",
+                        "curtailed_mwh": 20.0,
+                        "overload_cost": 26.0,
+                        "pass_rate": 1.0,
+                    },
+                    {
+                        "controller": "do_nothing",
+                        "curtailed_mwh": 0.0,
+                        "overload_cost": 365.0,
+                        "pass_rate": 0.9,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    points = pareto.load_policy_points([path], "test")
+    assert len(points) == 1, "only the policy row is taken"
+    assert points[0].curtailed_mwh == 20.0

@@ -48,6 +48,9 @@ sim = [
 # small, whereas `rl` pulls in PyTorch. CI can therefore test the environment
 # without installing a deep learning stack.
 env = ["gymnasium>=0.29"]
+# Static plots for the results report (architecture section 9.4). Kept out of
+# the core so that a training machine need not carry a plotting stack.
+viz = ["matplotlib>=3.8"]
 rl = [
   "lvgrid-rl[env]",
   "stable-baselines3>=2.3",
