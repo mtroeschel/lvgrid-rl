@@ -318,9 +318,17 @@ whose full extent is easy to miss.
 
 **Measured runtime** on `1-LV-rural1--2-sw` (15 buses): 23 ms per warm power flow
 step, about 45 ms per baseline step including a shadow power flow. A full year at
-five minutes is roughly 26 minutes. This is the figure against which the surrogate
-mode below has to justify itself, and it is the reason the training step size is
-chosen deliberately (§12, M3).
+five minutes is roughly 26 minutes single-threaded. In training, parallel workers
+hide most of that -- 51 to 59 control steps per second with eight workers, i.e.
+around 170 power flows per second (§12) -- so the power flow is no longer the
+binding cost once the rollouts are parallel. It still is for evaluation, which
+runs one controller at a time: a standard-conforming pass over nine complete test
+weeks costs about twenty minutes per controller.
+
+This is the figure against which the surrogate mode below has to justify itself.
+Note where it would actually pay off: not in training, where workers already
+absorb the cost, but in evaluation and in the predictive safety filter of M9,
+which rolls trajectories forward inside a single decision.
 
 **Optional surrogate mode.** A trained neural network or a linearised sensitivity
 matrix (∂U/∂P, ∂U/∂Q) as a fast stand-in for pre-training, with subsequent
@@ -1271,7 +1279,7 @@ is known to be reachable because P4 holds.
 | **M0** ✅ | skeleton, core schemas, reproducibility chain, CI, extensibility contract | manifest written, contract tests in place | I3, I7 (null) |
 | **M1** ✅ | data layer: SimBench adapter, UTC time base, resampling, Parquet cache with content hash, reactive power | energy-preserving resampling verified on the real year; cache key sensitive to policies | I6 |
 | **M2** ✅ | grid layer: loader with ZIP repair, power flow engine with hypothetical call, EN 50160 assessment, scenarios, P4 check | uncontrolled annual run per scenario documented; P4 verified; runtime measured | I5 |
-| **M3** | minimal environment: PV curtailment only, flat action space, `pq_budget` features, both constraint terms, `PettingZooAdapter` + equivalence test, baselines B0–B4 with their own parameter search, **stratified week split** (`env/splits.py`) | `check_env` passes; PPO beats B0 and the tuned droop baselines on `en50160_pass_rate` **and** overload integral under `moderate_growth`; single- and multi-agent paths bit-identical; test set covers all nine strata and its PV quantiles span the year | I1, I3 (env), I4, I7 (env) |
+| **M3** | minimal environment: PV curtailment only, flat action space, `pq_budget` features, both constraint terms, multi-agent view + equivalence test, baselines B0–B4 with their own parameter search, **stratified week split** (`env/splits.py`), training pipeline and cross-seed aggregation | `check_env` passes; PPO beats B0 and the tuned droop baselines on `en50160_pass_rate` **and** overload integral under `moderate_growth`; single- and multi-agent paths bit-identical; test set covers all nine strata and its PV quantiles span the year | I1, I3 (env), I4, I7 (env) |
 | **M4** | full actuator set: BESS, heat pump (buffer store), EVSE with session model; action mode 2 (per asset type); EV session generation from emobpy, calibrated against ElaadNL | all actuators active in one episode; clipping and comfort violations counted correctly; pure-function dynamics verified per asset type | I2 |
 | **M5** | data extension and forecasts: WPuQ and HTW for 1-minute validation, forecast error model with `perfect` as a special case | identical policy evaluated at `sim_dt = 10` and `sim_dt = 1`; difference reported; forecast leak test passes | — |
 | **M6** | evaluation chain and reference methods B5–B9, KPI engine, statistical aggregation, reports | KPI table RL vs. all baselines including `mpc_oracle`; reproduction test green in CI | — |
@@ -1287,12 +1295,40 @@ is known to be reachable because P4 holds.
 voltage and the thermal problem. M3 is therefore a complete control problem with a
 genuine cost trade-off, and B2/B3/B4 are real competitors rather than straw men.
 
-*Measured throughput, M3.* On `1-LV-rural1--2-sw` with four parallel workers,
-PPO collects about **15 control steps per second** — roughly 21 ms per power flow
-and three power flows per decision, plus the rollout overhead. 50,000 control
-steps are therefore around an hour, 200,000 about four. That is the budget a
-single seed costs, so a sweep over five seeds and four agent architectures is a
-question of days rather than hours and needs planning rather than patience.
+*Measured throughput and training budget, M3.* On `1-LV-rural1--2-sw`, PPO
+collects **39 control steps per second with four workers and 51 to 59 with
+eight**. Throughput is machine-dependent — the same configuration reaches only
+about 15 steps per second on a slower host — so these figures are a scale, not a
+constant, and a new machine should be measured rather than assumed.
+
+**The budget matters more than the seed count, and 200,000 steps are too few.**
+A diagnostic run over 600,000 steps shows the mean episode return rising
+monotonically throughout, with the slope halving roughly every 150,000 steps:
+
+| segment | slope (return per 100k steps) | mean return |
+|---|---|---|
+| 0–150k | +15.3 | −46.1 |
+| 150k–300k | +14.6 | −26.5 |
+| 300k–450k | +7.4 | −12.0 |
+| 450k–610k | +3.1 | −5.0 |
+
+At 200,000 steps a run is still in the steepest part of the curve: the return is
+around −35 there against −2.8 at 600,000, a factor of twelve. The policy's action
+standard deviation tells the same story — it barely moves before 200,000 steps
+and only then begins to fall, from 1.002 to 0.884 by the end. The critic, by
+contrast, is finished early: `explained_variance` passes 0.87 at 98,000 steps and
+reaches 0.998.
+
+The practical consequence is that a spread across seeds measured at 200,000 steps
+is largely **budget noise rather than seed variance** — three runs stopped at
+different points of a steeply rising curve. The working budget is therefore
+**600,000 steps**, about 2.9 hours per seed at 58 steps per second. Going to
+1,000,000 would buy perhaps three or four further points of return, which is
+little against the twelvefold gain already achieved and not worth twice the time.
+
+A sweep over five seeds is then roughly fourteen hours sequentially, or one night
+with two runs in parallel. Five seeds are the planned number: if the spread is
+small, ten add nothing, and if it stays large that is itself the result.
 
 *Training step size is constrained from two sides, and the intersection is
 narrower than either constraint alone.* EN 50160 requires the simulation step to
@@ -1305,11 +1341,11 @@ This invalidates the earlier recommendation of `sim_dt = 10 min` for training,
 which was made on the EN 50160 constraint alone. The working configuration is
 therefore `sim_dt = 5 min` with `control_dt = 15 min`, i.e. three power flows per
 decision, and 1 minute for the final evaluation. The compute argument does not go
-away: at 23 ms per power flow, a training budget is best counted in power flows
-rather than control steps. Roughly 2·10⁵ control steps amount to 1.2·10⁶ power
-flows, about eight hours on one worker and an hour across eight. Verifying that
-the 5-minute policy holds up at one minute is an M5 deliverable, not an
-afterthought.
+away — a control step costs three power flows, so a 600,000-step budget is
+1.8·10⁶ power flows — but it is no longer the binding consideration: the measured
+learning curve above decides the budget, and the parallel workers absorb the
+cost. Verifying that the 5-minute policy holds up at one minute is an M5
+deliverable, not an afterthought.
 
 *The evaluation split moves into M3.* The fixed evaluation set is needed as soon
 as the first policy is compared against a baseline, so the week characterisation
