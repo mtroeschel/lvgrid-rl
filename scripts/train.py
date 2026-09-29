@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from dataclasses import asdict
 from pathlib import Path
 
 from lvgrid_rl.agents.factory import AgentSpec, make_agent
@@ -28,8 +29,13 @@ from lvgrid_rl.data.timebase import TimeBase
 from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
 from lvgrid_rl.env.factory import make_env
 from lvgrid_rl.env.lv_grid_env import EnvConfig
+from lvgrid_rl.env.reward import RewardConfig, RewardMode
 from lvgrid_rl.eval.runner import run_controller
-from lvgrid_rl.experiment.callbacks import TrainingProgress
+from lvgrid_rl.experiment.callbacks import (
+    DEFAULT_DUALS,
+    LagrangianCallback,
+    TrainingProgress,
+)
 from lvgrid_rl.experiment.reproducibility import RunManifest, SeedSet
 
 
@@ -75,6 +81,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=10.0,
         help="seconds between progress updates",
+    )
+    parser.add_argument(
+        "--reward-mode",
+        default=RewardMode.FIXED_WEIGHTS.value,
+        choices=[m.value for m in RewardMode],
+        help="fixed_weights scalarises the constraint terms with their weights; "
+        "lagrangian rewards only the objective terms and prices the constraints "
+        "with multipliers updated by dual ascent (architecture section 6.4)",
     )
     parser.add_argument(
         "--n-steps",
@@ -123,6 +137,7 @@ def main() -> None:
     """Train, evaluate against the tuned baselines, and write the run directory."""
     args = build_parser().parse_args()
 
+    from stable_baselines3.common.callbacks import CallbackList
     from stable_baselines3.common.vec_env import (
         DummyVecEnv,
         SubprocVecEnv,
@@ -135,7 +150,8 @@ def main() -> None:
     if not is_tuned:
         print("WARNING: comparing against untuned baselines; not admissible.\n")
 
-    config = EnvConfig()
+    reward_mode = RewardMode(args.reward_mode)
+    config = EnvConfig(reward=RewardConfig(mode=reward_mode))
     timebase = TimeBase(config.sim_dt_min, config.control_dt_min)
     seeds = SeedSet.from_base(args.seed)
 
@@ -166,10 +182,23 @@ def main() -> None:
             "sim_dt_min": config.sim_dt_min,
             "control_dt_min": config.control_dt_min,
             "eval_set": args.eval_set,
+            "reward_mode": reward_mode.value,
+            # Part of the hashed configuration: the dual settings decide the
+            # trajectory of a Lagrangian run as much as weights decide a
+            # fixed-weight one.
+            **(
+                {"duals": {name: asdict(d) for name, d in DEFAULT_DUALS.items()}}
+                if reward_mode is RewardMode.LAGRANGIAN
+                else {}
+            ),
         },
         data_manifest_hash="simbench-builtin",
         base_seed=args.seed,
-        notes="M3 training run, PV curtailment only",
+        notes=(
+            "M3 training run, PV curtailment only"
+            if reward_mode is RewardMode.FIXED_WEIGHTS
+            else "Lagrangian validation on the M3 setup, PV curtailment only"
+        ),
     )
     run_dir = args.run_dir / manifest.run_id
     manifest.write(run_dir)
@@ -194,17 +223,31 @@ def main() -> None:
     print(f"gamma    {model.gamma:.5f} (derived from control_dt)")
     print(f"workers  {args.workers}, steps {args.steps}")
 
-    callback = (
-        None
-        if args.no_progress
-        else TrainingProgress(args.steps, interval_s=args.progress_interval)
-    )
+    print(f"reward   {reward_mode.value}")
+
+    callbacks = []
+    if not args.no_progress:
+        callbacks.append(TrainingProgress(args.steps, interval_s=args.progress_interval))
+    lagrangian = None
+    if reward_mode is RewardMode.LAGRANGIAN:
+        lagrangian = LagrangianCallback(
+            config.reward,
+            DEFAULT_DUALS,
+            history_path=run_dir / "lagrangian.json",
+        )
+        callbacks.append(lagrangian)
+    callback = CallbackList(callbacks) if callbacks else None
     started = time.perf_counter()
     model.learn(total_timesteps=args.steps, progress_bar=False, callback=callback)
     elapsed = time.perf_counter() - started
     model.save(run_dir / "checkpoints" / "final")
     vec_env.close()
     print(f"trained  {args.steps} steps in {elapsed / 60:.1f} min")
+    if lagrangian is not None:
+        for name, value in lagrangian.multipliers.items():
+            bound = lagrangian.duals[name].lambda_max
+            flag = "  AT BOUND: degenerated to a fixed weight" if value >= bound else ""
+            print(f"lambda   {name:18s} {value:9.3f}{flag}")
 
     # Evaluate the policy and the baselines on exactly the same episodes.
     # Complete calendar weeks, fixed order, zero budget. The previous setting

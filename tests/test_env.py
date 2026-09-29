@@ -181,6 +181,9 @@ def test_terms_are_reported_individually() -> None:
         k100_violations_this_step=0,
         n_buses=13,
         dt_hours=0.25,
+        k95_worst_bus_this_step=0,
+        k100_worst_bus_this_step=0,
+        windows_per_step=1.5,
     )
     assert set(result.terms) == {
         "pv_curtailment",
@@ -209,8 +212,13 @@ def test_costs_are_reported_unweighted() -> None:
         k100_violations_this_step=0,
         n_buses=13,
         dt_hours=0.25,
+        k95_worst_bus_this_step=1,
+        k100_worst_bus_this_step=0,
+        windows_per_step=1.5,
     )
-    assert result.costs["en50160_k95"] == pytest.approx(13 / (13 * 50))
+    # One violating window at each of 13 buses is one at the worst bus: a rate
+    # of 1 / 1.5 for this step, not a thirteenth of anything.
+    assert result.costs["en50160_k95"] == pytest.approx(1 / 1.5)
 
 
 def test_lagrangian_mode_ignores_constraints_until_multipliers_are_set() -> None:
@@ -224,6 +232,9 @@ def test_lagrangian_mode_ignores_constraints_until_multipliers_are_set() -> None
         k100_violations_this_step=0,
         n_buses=13,
         dt_hours=0.25,
+        k95_worst_bus_this_step=2,
+        k100_worst_bus_this_step=0,
+        windows_per_step=1.5,
     )
     before = composer.compute(**kwargs)
     assert before.terms["en50160_k95"] == 0.0
@@ -247,6 +258,99 @@ def test_k95_limit_is_the_standard_criterion() -> None:
     assert RewardConfig().constraint["en50160_k95"].limit == pytest.approx(0.05)
 
 
+def _step_costs(composer: RewardComposer, worst_k95: int, total_k95: int) -> dict:
+    return composer.compute(
+        metrics=_metrics(),
+        curtailed_energy_mwh=0.0,
+        setpoint_change_mw=0.0,
+        k95_violations_this_step=total_k95,
+        k100_violations_this_step=0,
+        n_buses=13,
+        dt_hours=0.25,
+        k95_worst_bus_this_step=worst_k95,
+        k100_worst_bus_this_step=0,
+        windows_per_step=1.5,
+    ).costs
+
+
+def test_mean_voltage_cost_is_the_share_of_violating_windows() -> None:
+    """The mean K95 cost is the share of windows outside the band.
+
+    That is what makes the limit of 0.05 the standard's criterion rather than a
+    number that happens to be written the same way. Two control steps of 15
+    minutes close three windows; one of them violating at the worst bus is a
+    share of one third, whichever step it falls into.
+    """
+    composer = RewardComposer(RewardConfig(), budget_windows=50)
+    costs = [_step_costs(composer, 1, 4), _step_costs(composer, 0, 0)]
+    mean = np.mean([c["en50160_k95"] for c in costs])
+    assert mean == pytest.approx(1 / 3)
+
+
+def test_voltage_cost_does_not_depend_on_how_many_buses_violate() -> None:
+    """The worst bus decides, as in the standard's per-bus assessment.
+
+    A cost averaged over buses would let twelve compliant buses dilute one that
+    fails -- the defect of the M3 normalisation.
+    """
+    composer = RewardComposer(RewardConfig(), budget_windows=50)
+    one = _step_costs(composer, worst_k95=1, total_k95=1)
+    all_buses = _step_costs(composer, worst_k95=1, total_k95=13)
+    assert one["en50160_k95"] == all_buses["en50160_k95"]
+
+
+def test_fixed_weight_reward_keeps_the_m3_formulation() -> None:
+    """``fixed_weights`` reproduces M3, including its dead K95 hinge.
+
+    The M3 runs are the reference the Lagrangian variant is validated against,
+    so the fixed-weight reward must not change under them. That includes the
+    defect: the K95 value of a step is at most ``2 * n_buses / (n_buses *
+    budget)`` = 0.04, below the hinge at 0.05, so the term never fires even
+    when every bus closes two violating windows in one step.
+    """
+    composer = RewardComposer(RewardConfig(), budget_windows=50)
+    result = composer.compute(
+        metrics=_metrics(overload_excess_percent=40.0),
+        curtailed_energy_mwh=0.2,
+        setpoint_change_mw=0.1,
+        k95_violations_this_step=26,
+        k100_violations_this_step=1,
+        n_buses=13,
+        dt_hours=0.25,
+        k95_worst_bus_this_step=2,
+        k100_worst_bus_this_step=1,
+        windows_per_step=1.5,
+    )
+    assert result.terms["en50160_k95"] == 0.0
+    assert result.terms["en50160_k100"] == pytest.approx(-50.0 * 1 / 13)
+    assert result.terms["thermal_overload"] == pytest.approx(-10.0 * 0.4 * 0.25)
+    assert result.terms["pv_curtailment"] == pytest.approx(-0.2)
+
+
+def test_lagrangian_terms_are_multiplier_times_cost() -> None:
+    config = RewardConfig(mode=RewardMode.LAGRANGIAN)
+    composer = RewardComposer(config, budget_windows=50)
+    composer.set_multipliers({"en50160_k95": 2.0, "thermal_overload": 7.0})
+    result = composer.compute(
+        metrics=_metrics(overload_excess_percent=40.0),
+        curtailed_energy_mwh=0.2,
+        setpoint_change_mw=0.0,
+        k95_violations_this_step=3,
+        k100_violations_this_step=0,
+        n_buses=13,
+        dt_hours=0.25,
+        k95_worst_bus_this_step=1,
+        k100_worst_bus_this_step=0,
+        windows_per_step=1.5,
+    )
+    assert result.terms["en50160_k95"] == pytest.approx(-2.0 / 1.5)
+    assert result.terms["thermal_overload"] == pytest.approx(-7.0 * 0.4 * 0.25)
+    assert result.terms["en50160_k100"] == 0.0
+    # The objective is weighted as in fixed_weights mode; only the constraints
+    # change their pricing.
+    assert result.terms["pv_curtailment"] == pytest.approx(-0.2)
+
+
 def test_a_term_cannot_be_both_objective_and_constraint() -> None:
     with pytest.raises(ValueError, match="both categories"):
         RewardConfig(objective={"x": TermSpec(-1.0)}, constraint={"x": TermSpec(-1.0)})
@@ -262,6 +366,9 @@ def test_divergence_is_penalised_not_raised() -> None:
         k100_violations_this_step=0,
         n_buses=13,
         dt_hours=0.25,
+        k95_worst_bus_this_step=0,
+        k100_worst_bus_this_step=0,
+        windows_per_step=1.5,
     )
     assert result.total == RewardConfig().divergence_penalty
 

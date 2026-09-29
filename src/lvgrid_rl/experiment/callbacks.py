@@ -1,9 +1,11 @@
 """Training callbacks.
 
-Currently one: a progress display with a remaining-time estimate. A training run
-takes hours, and without feedback there is no way to tell a slow run from a hung
-one -- or to notice that the throughput dropped because something else started
-competing for the machine.
+Two of them. :class:`TrainingProgress` is a progress display with a
+remaining-time estimate: a training run takes hours, and without feedback there
+is no way to tell a slow run from a hung one -- or to notice that the throughput
+dropped because something else started competing for the machine.
+:class:`LagrangianCallback` updates the Lagrange multipliers of the constrained
+reward formulation (architecture section 6.4).
 
 **Why not Stable-Baselines3's own progress bar.** ``model.learn(progress_bar=True)``
 needs ``tqdm`` *and* ``rich``, and it renders as a live-updating widget that turns
@@ -16,14 +18,20 @@ that a run which is progressing but not learning is visible as such.
 
 from __future__ import annotations
 
+import json
 import sys
 import time
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import TextIO
 
 import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
 
-__all__ = ["TrainingProgress", "format_duration"]
+from lvgrid_rl.env.reward import RewardConfig, RewardMode
+
+__all__ = ["DualSpec", "LagrangianCallback", "TrainingProgress", "format_duration"]
 
 
 def format_duration(seconds: float) -> str:
@@ -130,3 +138,182 @@ class TrainingProgress(BaseCallback):
 
     def _on_training_end(self) -> None:
         self._emit(final=True)
+
+
+@dataclass(frozen=True, slots=True)
+class DualSpec:
+    """Dual ascent settings for one constraint term.
+
+    Args:
+        learning_rate: Step size of the multiplier per rollout, in reward units
+            per unit of cost excess. Well below the policy's own rate of change,
+            because the dual problem oscillates easily (§6.4).
+        lambda_max: Upper bound of the multiplier. A multiplier that ends at
+            this bound means the constraint was never met, and the run has
+            degenerated into a fixed penalty weight of ``lambda_max``; that is
+            reported, not hidden.
+        initial: Starting value.
+    """
+
+    learning_rate: float
+    lambda_max: float
+    initial: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.learning_rate <= 0 or self.lambda_max <= 0:
+            raise ValueError("learning_rate and lambda_max must be positive")
+        if not 0.0 <= self.initial <= self.lambda_max:
+            raise ValueError("initial must lie in [0, lambda_max]")
+
+
+DEFAULT_DUALS: Mapping[str, DualSpec] = {
+    # Rates, bounded by 2 / 1.5. A multiplier of 1 prices a violating window at
+    # the worst bus at two thirds of a megawatt-hour of curtailment -- some fifty
+    # times the mean PV yield of a control step on the test weeks.
+    "en50160_k95": DualSpec(learning_rate=1.0, lambda_max=50.0),
+    "en50160_k100": DualSpec(learning_rate=1.0, lambda_max=50.0),
+    # Uncontrolled, the thermal cost is about 0.06 per control step; a random
+    # policy about 0.035 (M3 test weeks). At that level the multiplier gains
+    # roughly 0.7 per rollout of 4,096 steps, and would pass the M3 weight of 10
+    # after about 60,000 steps if the cost did not fall in the meantime.
+    # The bound sits an order of magnitude above that weight, so that ending
+    # at it is distinguishable from ending near it.
+    "thermal_overload": DualSpec(learning_rate=20.0, lambda_max=200.0),
+}
+"""Starting values for the validation on the M3 setup, not tuned values."""
+
+
+class LagrangianCallback(BaseCallback):
+    """Dual ascent on the constraint costs, once per rollout.
+
+    ``lambda <- clip(lambda + eta * (J_c - d), 0, lambda_max)``, where ``J_c``
+    is an exponentially smoothed estimate of the mean cost per control step and
+    ``d`` the term's limit from the reward configuration. Because the voltage
+    costs are rates (:meth:`RewardComposer.compute`), ``d = 0.05`` for K95 is the
+    standard's criterion in the cost's own unit.
+
+    The update runs at the end of a rollout, after collection and before the
+    policy update. With an on-policy algorithm every reward in a rollout was
+    therefore computed with one and the same multiplier, and the non-stationarity
+    is confined to the boundary between rollouts. With an off-policy algorithm
+    this is **not** sufficient -- the replay buffer would mix multipliers -- and
+    the callback refuses to run there rather than produce a quietly biased
+    result.
+
+    With a limit of zero, as for the thermal term, ``J_c - d`` is never negative
+    and the multiplier can only grow. It then settles at the smallest value that
+    drives the cost to zero, or runs into ``lambda_max``. Both outcomes are
+    informative and are visible in the history.
+
+    Args:
+        reward: The reward configuration of the environments. Must be in
+            ``lagrangian`` mode; in ``fixed_weights`` mode the multipliers would
+            be ignored and the run would silently be a different experiment.
+        duals: Dual settings per constraint term; every constraint term of
+            ``reward`` needs one.
+        ema_decay: Weight of the previous estimate in the smoothing of ``J_c``.
+        history_path: Where to write the multiplier history as JSON at the end
+            of training, or ``None``.
+    """
+
+    def __init__(
+        self,
+        reward: RewardConfig,
+        duals: Mapping[str, DualSpec] = DEFAULT_DUALS,
+        ema_decay: float = 0.8,
+        history_path: Path | str | None = None,
+    ) -> None:
+        super().__init__()
+        if reward.mode is not RewardMode.LAGRANGIAN:
+            raise ValueError(
+                f"reward mode is {reward.mode.value!r}; the multipliers would be "
+                "ignored. Use RewardMode.LAGRANGIAN."
+            )
+        missing = set(reward.constraint) - set(duals)
+        if missing:
+            raise ValueError(f"No dual settings for constraint terms: {sorted(missing)}")
+        if not 0.0 <= ema_decay < 1.0:
+            raise ValueError("ema_decay must lie in [0, 1)")
+        self.limits = {name: spec.limit for name, spec in reward.constraint.items()}
+        self.duals = {name: duals[name] for name in self.limits}
+        self.ema_decay = ema_decay
+        self.history_path = Path(history_path) if history_path is not None else None
+        self.multipliers = {name: d.initial for name, d in self.duals.items()}
+        self.history: list[dict] = []
+        self._estimate: dict[str, float] = {}
+        self._reset_sums()
+
+    def _reset_sums(self) -> None:
+        self._sums = dict.fromkeys(self.limits, 0.0)
+        self._counts = dict.fromkeys(self.limits, 0)
+
+    def _push(self) -> None:
+        self.training_env.env_method("set_multipliers", dict(self.multipliers))
+
+    def _on_training_start(self) -> None:
+        from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
+
+        if isinstance(self.model, OffPolicyAlgorithm):
+            raise TypeError(
+                "LagrangianCallback supports on-policy algorithms only: a replay "
+                "buffer holds rewards computed with stale multipliers. Store the "
+                "costs separately and recompute the reward on sampling first."
+            )
+        self._push()
+
+    def _on_step(self) -> bool:
+        for info in self.locals.get("infos", ()):
+            for name in self.limits:
+                value = info.get(f"cost/{name}")
+                # A diverged power flow reports NaN costs; it carries its own
+                # penalty and must not poison the estimate.
+                if value is not None and np.isfinite(value):
+                    self._sums[name] += float(value)
+                    self._counts[name] += 1
+        return True
+
+    def _on_rollout_end(self) -> None:
+        entry: dict = {"timesteps": int(self.num_timesteps)}
+        for name, limit in self.limits.items():
+            if self._counts[name] == 0:
+                continue
+            mean = self._sums[name] / self._counts[name]
+            previous = self._estimate.get(name)
+            estimate = (
+                mean
+                if previous is None
+                else self.ema_decay * previous + (1.0 - self.ema_decay) * mean
+            )
+            self._estimate[name] = estimate
+            dual = self.duals[name]
+            updated = self.multipliers[name] + dual.learning_rate * (estimate - limit)
+            self.multipliers[name] = float(np.clip(updated, 0.0, dual.lambda_max))
+            entry[name] = {
+                "cost_mean": mean,
+                "cost_estimate": estimate,
+                "limit": limit,
+                "multiplier": self.multipliers[name],
+            }
+            self.logger.record(f"lagrangian/cost/{name}", mean)
+            self.logger.record(f"lagrangian/multiplier/{name}", self.multipliers[name])
+        self.history.append(entry)
+        self._reset_sums()
+        self._push()
+
+    def _on_training_end(self) -> None:
+        if self.history_path is None:
+            return
+        self.history_path.parent.mkdir(parents=True, exist_ok=True)
+        self.history_path.write_text(
+            json.dumps(
+                {
+                    "ema_decay": self.ema_decay,
+                    "duals": {name: asdict(d) for name, d in self.duals.items()},
+                    "final_multipliers": self.multipliers,
+                    "history": self.history,
+                },
+                indent=2,
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )

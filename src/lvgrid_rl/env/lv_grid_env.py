@@ -186,6 +186,21 @@ class LVGridEnv(gym.Env):
         """Duration of one simulation step in hours."""
         return self.config.sim_dt_min / 60.0
 
+    @property
+    def multipliers(self) -> Mapping[str, float]:
+        """Current Lagrange multipliers of the reward composer."""
+        return self.reward_composer.multipliers
+
+    def set_multipliers(self, values: Mapping[str, float]) -> None:
+        """Set the Lagrange multipliers.
+
+        The entry point for the training loop: with parallel workers each
+        environment lives in its own process, and this method is what
+        ``VecEnv.env_method`` reaches. The environment never changes the
+        multipliers itself.
+        """
+        self.reward_composer.set_multipliers(values)
+
     def _budget_potential(self) -> float:
         """Current value of the shaping potential."""
         pq = self.aggregator.state()
@@ -346,6 +361,10 @@ class LVGridEnv(gym.Env):
         curtailed_mwh = 0.0
         k95_total = 0
         k100_total = 0
+        # Per bus as well as summed: the constraint costs are rates at the worst
+        # bus, and a sum over buses cannot be turned back into that.
+        k95_per_bus = np.zeros(self.model.n_evaluated_buses, dtype=np.int64)
+        k100_per_bus = np.zeros(self.model.n_evaluated_buses, dtype=np.int64)
         overload_excess = 0.0
         losses_mwh = 0.0
         worst_vm = (float("inf"), -float("inf"))
@@ -379,14 +398,16 @@ class LVGridEnv(gym.Env):
             if grid.converged:
                 self.aggregator.add_sample(grid.vm_pu[self.model.evaluated_bus_positions])
             after = self.aggregator.state()
-            k95_total += int(
-                np.asarray(after.violations_k95_count).sum()
-                - np.asarray(before.violations_k95_count).sum()
+            k95_delta = np.asarray(after.violations_k95_count) - np.asarray(
+                before.violations_k95_count
             )
-            k100_total += int(
-                np.asarray(after.violations_k100_count).sum()
-                - np.asarray(before.violations_k100_count).sum()
+            k100_delta = np.asarray(after.violations_k100_count) - np.asarray(
+                before.violations_k100_count
             )
+            k95_per_bus += k95_delta
+            k100_per_bus += k100_delta
+            k95_total += int(k95_delta.sum())
+            k100_total += int(k100_delta.sum())
 
             for asset in self.assets:
                 new_state, outcome = asset.dynamics(
@@ -435,6 +456,9 @@ class LVGridEnv(gym.Env):
             k100_violations_this_step=k100_total,
             n_buses=self.model.n_evaluated_buses,
             dt_hours=self.dt_hours * max(inner_steps, 1),
+            k95_worst_bus_this_step=int(k95_per_bus.max(initial=0)),
+            k100_worst_bus_this_step=int(k100_per_bus.max(initial=0)),
+            windows_per_step=self.config.control_dt_min / 10,
         )
         reward_total = step_reward.total
         breakdown_terms = dict(step_reward.terms)

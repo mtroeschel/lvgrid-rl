@@ -189,3 +189,44 @@ def test_tuned_parameters_are_used_when_present(tmp_path) -> None:
     params, is_tuned = load_baseline_params(path, allow_untuned=False)
     assert is_tuned is True
     assert params["fixed_cap"]["params"]["cap"] == 0.42
+
+
+# ---------------------------------------------------------------------------
+# Lagrangian training loop
+# ---------------------------------------------------------------------------
+
+
+def test_multipliers_reach_the_environment_during_training() -> None:
+    """The dual ascent acts on the environment that computes the reward.
+
+    With vectorised workers the multipliers live in the callback and the reward
+    in the environments; if the push went nowhere, the run would silently train
+    on the objective alone and still look like a Lagrangian run.
+    """
+    pytest.importorskip("simbench", reason="extra 'sim' not installed")
+    from stable_baselines3.common.vec_env import DummyVecEnv, VecMonitor
+
+    from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
+    from lvgrid_rl.env.factory import make_env
+    from lvgrid_rl.env.lv_grid_env import EnvConfig
+    from lvgrid_rl.env.reward import RewardConfig, RewardMode
+    from lvgrid_rl.experiment.callbacks import LagrangianCallback
+
+    config = EnvConfig(reward=RewardConfig(mode=RewardMode.LAGRANGIAN))
+    spec = EpisodeSpec(mode=EpisodeMode.TRAIN, length_days=1, randomise_budget=False)
+    env = make_env(seed=1, config=config, episode_spec=spec, set_name="stress")
+    vec_env = VecMonitor(DummyVecEnv([lambda: env]))
+    model = make_agent(
+        AgentSpec(algo="ppo", hyperparams={"n_steps": 16, "batch_size": 16}),
+        vec_env,
+        TIMEBASE,
+        seed=1,
+    )
+    callback = LagrangianCallback(config.reward)
+    model.learn(total_timesteps=32, callback=callback)
+
+    assert len(callback.history) == 2
+    assert env.multipliers == callback.multipliers
+    # The stress weeks overload the transformer without control, so a random
+    # policy must have pushed the thermal multiplier off zero.
+    assert callback.multipliers["thermal_overload"] > 0.0
