@@ -83,6 +83,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="seconds between progress updates",
     )
     parser.add_argument(
+        "--no-final-eval",
+        action="store_true",
+        help="save the checkpoint and stop, without the report on --eval-set. "
+        "The report recomputes every baseline, which is deterministic and "
+        "identical across runs, and costs over an hour per run; the acceptance "
+        "figure comes from scripts/evaluate.py on the test weeks either way.",
+    )
+    parser.add_argument(
         "--reward-mode",
         default=RewardMode.FIXED_WEIGHTS.value,
         choices=[m.value for m in RewardMode],
@@ -248,6 +256,9 @@ def main() -> None:
             bound = lagrangian.duals[name].lambda_max
             flag = "  AT BOUND: degenerated to a fixed weight" if value >= bound else ""
             print(f"lambda   {name:18s} {value:9.3f}{flag}")
+    if args.no_final_eval:
+        print(f"\nwritten: {run_dir}")
+        return
 
     # Evaluate the policy and the baselines on exactly the same episodes.
     # Complete calendar weeks, fixed order, zero budget. The previous setting

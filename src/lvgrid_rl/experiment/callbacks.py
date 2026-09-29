@@ -167,18 +167,24 @@ class DualSpec:
 
 
 DEFAULT_DUALS: Mapping[str, DualSpec] = {
-    # Rates, bounded by 2 / 1.5. A multiplier of 1 prices a violating window at
-    # the worst bus at two thirds of a megawatt-hour of curtailment -- some fifty
-    # times the mean PV yield of a control step on the test weeks.
-    "en50160_k95": DualSpec(learning_rate=1.0, lambda_max=50.0),
-    "en50160_k100": DualSpec(learning_rate=1.0, lambda_max=50.0),
-    # Uncontrolled, the thermal cost is about 0.06 per control step; a random
-    # policy about 0.035 (M3 test weeks). At that level the multiplier gains
-    # roughly 0.7 per rollout of 4,096 steps, and would pass the M3 weight of 10
-    # after about 60,000 steps if the cost did not fall in the meantime.
-    # The bound sits an order of magnitude above that weight, so that ending
-    # at it is distinguishable from ending near it.
-    "thermal_overload": DualSpec(learning_rate=20.0, lambda_max=200.0),
+    # The step sizes are per rollout, and a rollout is long: train.py runs PPO
+    # with the Stable-Baselines3 default of 2,048 steps per worker, 16,384 with
+    # eight workers, so a 600,000-step run has only about 37 dual updates.
+    #
+    # Voltage costs are rates, bounded by 2 / 1.5. A multiplier of 1 prices a
+    # violating window at the worst bus at two thirds of a megawatt-hour of
+    # curtailment -- some fifty times the mean PV yield of a control step on the
+    # test weeks.
+    "en50160_k95": DualSpec(learning_rate=4.0, lambda_max=50.0),
+    "en50160_k100": DualSpec(learning_rate=4.0, lambda_max=50.0),
+    # An untrained policy produces a thermal cost of about 0.03 per control step
+    # on the training episodes (0.035 for the random controller on the test
+    # weeks). At that level the multiplier gains about 2.4 per rollout and would
+    # pass the M3 weight of 10 after four or five rollouts, some 75,000 steps,
+    # if the cost did not fall in the meantime. The bound sits an order of
+    # magnitude above that weight, so that ending at it is distinguishable from
+    # ending near it.
+    "thermal_overload": DualSpec(learning_rate=80.0, lambda_max=200.0),
 }
 """Starting values for the validation on the M3 setup, not tuned values."""
 
