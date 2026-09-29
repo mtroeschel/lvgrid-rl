@@ -154,3 +154,68 @@ def test_only_policy_rows_are_collected(tmp_path) -> None:
     rows = load_policy_rows([path], "test")
     assert len(rows) == 1
     assert rows[0]["run"] == "run"
+
+
+# ---------------------------------------------------------------------------
+# Reference quality
+# ---------------------------------------------------------------------------
+
+
+def test_reference_carries_the_bracket_it_came_from() -> None:
+    """The interpolated value alone cannot say how much it is worth."""
+    from aggregate import cap_reference
+
+    reference = cap_reference(_pareto_payload(), 15.0)
+    assert reference is not None
+    assert reference.overload == pytest.approx(120.0)
+    assert reference.lower_mwh == 10.0
+    assert reference.upper_mwh == 20.0
+    assert reference.gap_mwh == pytest.approx(10.0)
+
+
+def test_uncontrolled_overload_is_the_scale_for_relative_claims() -> None:
+    """The uncontrolled value is the scale for relative claims.
+
+    Without one, a two-unit difference reads either as "96 % better" or as "half
+    a percent of the problem", and only the second is informative.
+    """
+    from aggregate import uncontrolled_overload
+
+    assert uncontrolled_overload(_pareto_payload()) == pytest.approx(360.0)
+
+
+def test_uncontrolled_overload_falls_back_to_the_worst_cap() -> None:
+    """A Pareto file without a reference point must not yield NaN silently."""
+    from aggregate import uncontrolled_overload
+
+    payload = {
+        "points": [
+            {"kind": "fixed_cap", "curtailed_mwh": 1.0, "overload_cost": 300.0},
+            {"kind": "fixed_cap", "curtailed_mwh": 9.0, "overload_cost": 10.0},
+        ]
+    }
+    assert uncontrolled_overload(payload) == pytest.approx(300.0)
+
+
+def test_thresholds_match_the_documented_values() -> None:
+    from aggregate import SMALL_REFERENCE_FRACTION, WIDE_GAP_FRACTION
+
+    assert SMALL_REFERENCE_FRACTION == 0.05
+    assert WIDE_GAP_FRACTION == 0.10
+
+
+def test_a_near_zero_reference_would_inflate_a_percentage() -> None:
+    """The M3 case, reduced to numbers.
+
+    A policy at zero overload against a reference of 2.0 is '100 % better' while
+    the uncontrolled grid sits at 366 -- the difference is half a percent of the
+    problem. The absolute figure is the honest one, which is why the script
+    reports it unconditionally and the percentage only above the threshold.
+    """
+    from aggregate import SMALL_REFERENCE_FRACTION
+
+    uncontrolled = 365.7
+    reference, policy = 2.0, 0.0
+    assert 100.0 * (reference - policy) / reference == pytest.approx(100.0)
+    assert (reference - policy) / uncontrolled < 0.01
+    assert reference < SMALL_REFERENCE_FRACTION * uncontrolled
