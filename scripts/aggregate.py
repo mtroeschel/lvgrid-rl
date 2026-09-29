@@ -34,7 +34,30 @@ from pathlib import Path
 
 import numpy as np
 
-__all__ = ["iqm", "bootstrap_ci", "Aggregate", "aggregate_metric", "cap_curve_overload"]
+__all__ = [
+    "iqm",
+    "bootstrap_ci",
+    "Aggregate",
+    "aggregate_metric",
+    "CapReference",
+    "cap_reference",
+    "cap_curve_overload",
+    "uncontrolled_overload",
+    "SMALL_REFERENCE_FRACTION",
+    "WIDE_GAP_FRACTION",
+]
+
+SMALL_REFERENCE_FRACTION = 0.05
+"""Below this share of the uncontrolled overload, a percentage is not reported.
+
+A relative advantage over a reference that is already near zero says nothing
+about the size of the improvement -- in M3 it turned a two-unit difference into
+"96 % better", against an uncontrolled value of 366.
+"""
+
+WIDE_GAP_FRACTION = 0.10
+"""Bracket width, as a share of the swept range, above which the curve is
+considered poorly resolved at that point."""
 
 MIN_SEEDS_FOR_CI = 5
 """Below this the interval is reported but flagged as indicative.
@@ -120,8 +143,35 @@ def aggregate_metric(metric: str, values: Sequence[float], seed: int = 0) -> Agg
     )
 
 
-def cap_curve_overload(pareto_payload: dict, curtailed_mwh: float) -> float | None:
-    """Overload a fixed cap leaves when curtailing the given amount.
+@dataclass(frozen=True, slots=True)
+class CapReference:
+    """What a fixed cap achieves at a given curtailment, and how well it is known.
+
+    The interpolated value alone is not enough to judge a comparison. Two things
+    can make it misleading, and both occurred in the M3 results:
+
+    * the reference can be so small that a percentage against it inflates a
+      difference of two overload units into "96 % better";
+    * the policy can sit in a **gap** of the cap sweep, where the interpolation
+      is a straight line through unmeasured ground. In M3 all five policies fell
+      into a 12.6 MWh gap between the caps at 0.15 and 0.10.
+
+    The fields therefore carry the bracket, so the caller can say how much the
+    number is worth.
+    """
+
+    overload: float
+    lower_mwh: float
+    upper_mwh: float
+
+    @property
+    def gap_mwh(self) -> float:
+        """Distance between the two measured caps bracketing the query point."""
+        return self.upper_mwh - self.lower_mwh
+
+
+def cap_reference(pareto_payload: dict, curtailed_mwh: float) -> CapReference | None:
+    """Interpolate the cap curve and report the bracket it came from.
 
     Linear interpolation between the measured cap points. Returns ``None``
     outside the measured range rather than extrapolating: beyond the sweep the
@@ -143,10 +193,30 @@ def cap_curve_overload(pareto_payload: dict, curtailed_mwh: float) -> float | No
         if xs[i] <= curtailed_mwh <= xs[i + 1]:
             span = xs[i + 1] - xs[i]
             if span == 0:
-                return ys[i]
+                return CapReference(ys[i], xs[i], xs[i + 1])
             f = (curtailed_mwh - xs[i]) / span
-            return ys[i] + f * (ys[i + 1] - ys[i])
+            return CapReference(ys[i] + f * (ys[i + 1] - ys[i]), xs[i], xs[i + 1])
     return None
+
+
+def cap_curve_overload(pareto_payload: dict, curtailed_mwh: float) -> float | None:
+    """Overload a fixed cap leaves when curtailing the given amount."""
+    reference = cap_reference(pareto_payload, curtailed_mwh)
+    return None if reference is None else reference.overload
+
+
+def uncontrolled_overload(pareto_payload: dict) -> float:
+    """Overload of the uncontrolled grid, as the scale for relative statements.
+
+    Without a scale a difference of two overload units reads as either "96 %
+    better" or "half a percent of the problem", and only the second is
+    informative.
+    """
+    for point in pareto_payload["points"]:
+        if point["kind"] == "reference":
+            return float(point["overload_cost"])
+    caps = [p for p in pareto_payload["points"] if p["kind"] == "fixed_cap"]
+    return max((float(p["overload_cost"]) for p in caps), default=float("nan"))
 
 
 def load_policy_rows(paths: Sequence[Path], set_name: str) -> list[dict]:
@@ -204,42 +274,113 @@ def main() -> None:
     advantage_payload = None
     if args.pareto is not None:
         pareto_payload = json.loads(args.pareto.read_text(encoding="utf-8"))
+        scale = uncontrolled_overload(pareto_payload)
+        caps = [
+            p["curtailed_mwh"]
+            for p in pareto_payload["points"]
+            if p["kind"] == "fixed_cap"
+        ]
+        swept = (max(caps) - min(caps)) if caps else float("nan")
+
         per_seed = []
         for row in rows:
-            reference = cap_curve_overload(pareto_payload, row["curtailed_mwh"])
-            if reference is None or reference <= 0.0:
+            reference = cap_reference(pareto_payload, row["curtailed_mwh"])
+            if reference is None:
                 continue
+            difference = reference.overload - row["overload_cost"]
+            small = reference.overload < SMALL_REFERENCE_FRACTION * scale
+            wide = reference.gap_mwh > WIDE_GAP_FRACTION * swept
             per_seed.append(
                 {
                     "run": row["run"],
                     "curtailed_mwh": row["curtailed_mwh"],
                     "policy_overload": row["overload_cost"],
-                    "cap_overload": reference,
-                    "advantage_percent": 100.0
-                    * (reference - row["overload_cost"])
-                    / reference,
+                    "cap_overload": reference.overload,
+                    "difference": difference,
+                    "difference_of_uncontrolled_percent": 100.0 * difference / scale,
+                    "advantage_percent": (
+                        100.0 * difference / reference.overload
+                        if reference.overload > 0
+                        else float("nan")
+                    ),
+                    "reference_is_small": small,
+                    "bracket_mwh": [reference.lower_mwh, reference.upper_mwh],
+                    "bracket_gap_mwh": reference.gap_mwh,
+                    "poorly_resolved": wide,
                 }
             )
+
         if per_seed:
-            values = [p["advantage_percent"] for p in per_seed]
-            agg = aggregate_metric("overload_advantage_%", values, seed=args.seed)
             print("\nagainst a fixed cap curtailing the same energy:")
+            print(
+                f"  {'run':12s} {'curtailed':>10s} {'policy':>9s} {'cap':>9s} "
+                f"{'diff':>8s} {'of uncontr.':>12s}  notes"
+            )
             for p in per_seed:
+                notes = []
+                if p["reference_is_small"]:
+                    notes.append("reference near zero")
+                if p["poorly_resolved"]:
+                    notes.append(f"gap {p['bracket_gap_mwh']:.1f} MWh")
                 print(
-                    f"  {p['run'][:12]:14s} {p['curtailed_mwh']:7.2f} MWh | "
-                    f"policy {p['policy_overload']:8.3f} vs cap "
-                    f"{p['cap_overload']:8.3f} -> {p['advantage_percent']:+6.1f} %"
+                    f"  {p['run'][:10]:12s} {p['curtailed_mwh']:10.2f} "
+                    f"{p['policy_overload']:9.3f} {p['cap_overload']:9.3f} "
+                    f"{p['difference']:8.3f} "
+                    f"{p['difference_of_uncontrolled_percent']:11.2f} %  "
+                    + ("; ".join(notes) if notes else "")
                 )
-            print("\n" + agg.format_row())
+
+            # The absolute difference is aggregated unconditionally; the
+            # percentage only where the reference is large enough to carry one.
+            absolute = aggregate_metric(
+                "overload_difference", [p["difference"] for p in per_seed], seed=args.seed
+            )
+            print("\n" + absolute.format_row())
+            relative_values = [
+                p["advantage_percent"]
+                for p in per_seed
+                if not p["reference_is_small"] and np.isfinite(p["advantage_percent"])
+            ]
+            relative = None
+            if relative_values:
+                relative = aggregate_metric(
+                    "overload_advantage_%", relative_values, seed=args.seed
+                )
+                print(relative.format_row())
+            else:
+                print(
+                    "  overload_advantage_%   not reported: every reference is "
+                    f"below {SMALL_REFERENCE_FRACTION:.0%} of the uncontrolled "
+                    f"overload ({scale:.1f}), so a percentage would inflate a "
+                    "difference of a few units into a near-total advantage."
+                )
+
+            if any(p["poorly_resolved"] for p in per_seed):
+                print(
+                    "\n  WARNING: policies fall into a gap of the cap sweep, so "
+                    "the reference is a straight line through unmeasured ground. "
+                    "Refine the sweep around the policies before reporting."
+                )
+
             advantage_payload = {
+                "uncontrolled_overload": scale,
                 "per_seed": per_seed,
-                "aggregate": {
-                    "iqm": agg.iqm,
-                    "ci_low": agg.ci_low,
-                    "ci_high": agg.ci_high,
-                    "n_seeds": agg.n_seeds,
-                    "indicative_only": agg.indicative_only,
+                "absolute": {
+                    "iqm": absolute.iqm,
+                    "ci_low": absolute.ci_low,
+                    "ci_high": absolute.ci_high,
+                    "n_seeds": absolute.n_seeds,
                 },
+                "relative": (
+                    None
+                    if relative is None
+                    else {
+                        "iqm": relative.iqm,
+                        "ci_low": relative.ci_low,
+                        "ci_high": relative.ci_high,
+                        "n_seeds": relative.n_seeds,
+                    }
+                ),
             }
 
     if any(a.indicative_only for a in aggregates):
