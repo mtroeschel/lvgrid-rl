@@ -123,9 +123,14 @@ and reproduce with `scripts/survey_grids.py`.
 
 ## Next steps
 
-* **M3** minimal environment: PV curtailment only, Gymnasium API, `pq_budget`
-  observation features, both constraint terms in the reward, and baselines B0-B4
-  with their own parameter search.
+M0 to M3 are complete. The M3 acceptance record is
+[`docs/results/m3.md`](docs/results/m3.md): the criterion is met across five
+seeds on the test weeks, and the Pareto comparison shows the policies on the
+frontier — though by a small margin, which is what one should expect when PV
+curtailment is the only actuator.
+
+* **M4** full actuator set: battery storage, heat pump with a buffer model, and
+  charge points with a session model. Invariant I2 falls due.
 
 See section 12 of the architecture document for the full roadmap.
 

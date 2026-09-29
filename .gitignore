@@ -10,6 +10,9 @@ __pycache__/
 # Reproduzierbarkeitskette (Abschnitt 8.2 der Architektur).
 # Ergebnisse und Datencaches werden nicht versioniert. Reproduzierbarkeit laeuft
 # ueber Konfiguration, Seeds und Datenmanifest, nicht ueber eingecheckte Artefakte.
-results/
-data/cache/
-data/raw/
+# Anchored to the repository root on purpose: an unanchored `results/` matches a
+# directory of that name at any depth, which silently excluded the acceptance
+# record under docs/results/.
+/results/
+/data/cache/
+/data/raw/

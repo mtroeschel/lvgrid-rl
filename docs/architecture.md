@@ -1279,7 +1279,7 @@ is known to be reachable because P4 holds.
 | **M0** ✅ | skeleton, core schemas, reproducibility chain, CI, extensibility contract | manifest written, contract tests in place | I3, I7 (null) |
 | **M1** ✅ | data layer: SimBench adapter, UTC time base, resampling, Parquet cache with content hash, reactive power | energy-preserving resampling verified on the real year; cache key sensitive to policies | I6 |
 | **M2** ✅ | grid layer: loader with ZIP repair, power flow engine with hypothetical call, EN 50160 assessment, scenarios, P4 check | uncontrolled annual run per scenario documented; P4 verified; runtime measured | I5 |
-| **M3** | minimal environment: PV curtailment only, flat action space, `pq_budget` features, both constraint terms, multi-agent view + equivalence test, baselines B0–B4 with their own parameter search, **stratified week split** (`env/splits.py`), training pipeline and cross-seed aggregation | `check_env` passes; PPO beats B0 and the tuned droop baselines on `en50160_pass_rate` **and** overload integral under `moderate_growth`; single- and multi-agent paths bit-identical; test set covers all nine strata and its PV quantiles span the year | I1, I3 (env), I4, I7 (env) |
+| **M3** ✅ | minimal environment: PV curtailment only, flat action space, `pq_budget` features, both constraint terms, multi-agent view + equivalence test, baselines B0–B4 with their own parameter search, **stratified week split** (`env/splits.py`), training pipeline and cross-seed aggregation | `check_env` passes; PPO beats B0 and the tuned droop baselines on `en50160_pass_rate` **and** overload integral under `moderate_growth`; single- and multi-agent paths bit-identical; test set covers all nine strata and its PV quantiles span the year | I1, I3 (env), I4, I7 (env) |
 | **M4** | full actuator set: BESS, heat pump (buffer store), EVSE with session model; action mode 2 (per asset type); EV session generation from emobpy, calibrated against ElaadNL | all actuators active in one episode; clipping and comfort violations counted correctly; pure-function dynamics verified per asset type | I2 |
 | **M5** | data extension and forecasts: WPuQ and HTW for 1-minute validation, forecast error model with `perfect` as a special case | identical policy evaluated at `sim_dt = 10` and `sim_dt = 1`; difference reported; forecast leak test passes | — |
 | **M6** | evaluation chain and reference methods B5–B9, KPI engine, statistical aggregation, reports | KPI table RL vs. all baselines including `mpc_oracle`; reproduction test green in CI | — |
@@ -1289,6 +1289,14 @@ is known to be reachable because P4 holds.
 | **M10** | generalisation and multi-agent: transfer across grids and scenarios, action mode 3 | training on grid A, test on grid B; multi-agent arm evaluated | — |
 
 **Notes on the cut**
+
+*M3 is complete; the acceptance record is `docs/results/m3.md`.* The criterion is
+met across five seeds on the test weeks. The Pareto comparison adds the part the
+criterion does not ask about: three of five policies push a measured fixed cap
+off the front, and at zero overload the best policy needs 4.4 % less curtailment
+than the best cap — genuinely on the frontier, but by a small margin. With PV
+curtailment as the only actuator that is about what one should expect, which is
+the main argument for M4.
 
 *M3 is not a toy.* Under `moderate_growth` the fallback action brings loading from
 280 % to 55.6 % and voltage to 1.051 pu, so PV curtailment alone resolves both the
