@@ -9,6 +9,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from lvgrid_rl.eval.kpi_schema import KPI_SCHEMA
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from aggregate import (  # noqa: E402
@@ -130,7 +132,10 @@ def test_only_cap_points_define_the_curve() -> None:
 
 def test_results_from_another_set_are_rejected(tmp_path) -> None:
     path = tmp_path / "val.json"
-    path.write_text(json.dumps({"set": "val", "results": []}), encoding="utf-8")
+    path.write_text(
+        json.dumps({"set": "val", "kpi_schema": KPI_SCHEMA, "results": []}),
+        encoding="utf-8",
+    )
     with pytest.raises(ValueError, match="not 'test'"):
         load_policy_rows([path], "test")
 
@@ -143,6 +148,7 @@ def test_only_policy_rows_are_collected(tmp_path) -> None:
         json.dumps(
             {
                 "set": "test",
+                "kpi_schema": KPI_SCHEMA,
                 "results": [
                     {"controller": "policy", "pass_rate": 1.0},
                     {"controller": "do_nothing", "pass_rate": 0.9},
@@ -154,6 +160,18 @@ def test_only_policy_rows_are_collected(tmp_path) -> None:
     rows = load_policy_rows([path], "test")
     assert len(rows) == 1
     assert rows[0]["run"] == "run"
+
+
+def test_results_with_the_old_overload_unit_are_rejected(tmp_path) -> None:
+    """An unstamped file states overload three times the integral.
+
+    Mixing it with current results would put a factor of three into one column
+    of a table that otherwise looks entirely plausible.
+    """
+    path = tmp_path / "test.json"
+    path.write_text(json.dumps({"set": "test", "results": []}), encoding="utf-8")
+    with pytest.raises(ValueError, match="KPI schema 1"):
+        load_policy_rows([path], "test")
 
 
 # ---------------------------------------------------------------------------

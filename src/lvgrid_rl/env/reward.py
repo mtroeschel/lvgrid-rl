@@ -69,7 +69,11 @@ class RewardConfig:
         default_factory=lambda: {
             "en50160_k95": TermSpec(weight=-10.0, limit=K95_BUDGET_FRACTION),
             "en50160_k100": TermSpec(weight=-50.0, limit=0.0),
-            "thermal_overload": TermSpec(weight=-10.0, limit=0.0),
+            # 30, not the 10 of M3: the cost is now the percent-hour integral,
+            # a third of the M3 value at 5 on 15 minutes. The product -- and
+            # with it the trade-off every M3 and M4.0 policy learned -- is
+            # unchanged (docs/results/m3.md, correction note).
+            "thermal_overload": TermSpec(weight=-30.0, limit=0.0),
         }
     )
     potential_scale: float = 1.0
@@ -108,13 +112,10 @@ class RewardComposer:
 
     Args:
         config: Term weights and mode.
-        budget_windows: Permitted violating windows per bus and week, used to
-            normalise the K95 cost onto ``[0, ~1]``.
     """
 
-    def __init__(self, config: RewardConfig, budget_windows: int) -> None:
+    def __init__(self, config: RewardConfig) -> None:
         self.config = config
-        self.budget_windows = max(budget_windows, 1)
         self._multipliers: dict[str, float] = dict.fromkeys(config.constraint, 0.0)
 
     @property
@@ -162,6 +163,7 @@ class RewardComposer:
         *,
         k95_worst_bus_this_step: int,
         k100_worst_bus_this_step: int,
+        k95_beyond_budget_worst_bus_this_step: int,
         windows_per_step: float,
     ) -> RewardBreakdown:
         """Evaluate the reward for one control step.
@@ -183,6 +185,9 @@ class RewardComposer:
             k95_worst_bus_this_step: Largest number of K95 windows that closed
                 outside the band at any single bus during this step.
             k100_worst_bus_this_step: Same for the absolute band.
+            k95_beyond_budget_worst_bus_this_step: K95 windows of this step that
+                exceeded the weekly budget of their bus, at the worst bus. Only
+                these break the criterion; the fixed-weight K95 term prices them.
             windows_per_step: Assessment windows per control step on average,
                 ``control_dt / 10 min`` -- 1.5 at a 15-minute control step.
 
@@ -232,23 +237,28 @@ class RewardComposer:
                 terms[name] = spec.weight * value
 
         if self.config.mode is RewardMode.FIXED_WEIGHTS:
-            # The M3 formulation, kept bit-identical so that the M3 runs remain
-            # the reference the Lagrangian variant is validated against. Its
-            # voltage terms use their own normalisation, not the rates above,
-            # and the K95 hinge compares a per-step value against the weekly
-            # share: a step closes at most two windows per bus, so the value
-            # never exceeds 2 / budget_windows = 0.04 < 0.05 and **the K95 term
-            # is identically zero**. The voltage signal in M3 came from the
-            # budget potential alone (docs/results/m3.md, correction note).
-            scale = max(n_buses, 1) * self.budget_windows
-            legacy = {
-                "en50160_k95": k95_violations_this_step / scale,
+            # K95 prices the windows that break the criterion -- those beyond
+            # the bus's weekly budget -- one weight per window. Up to the budget
+            # an excursion is tolerated by the standard, and the budget
+            # potential steers how it is spent (§6.6). The limit plays no part
+            # here: it is already contained in the budget.
+            #
+            # M3 used a hinge on a per-step value that could never exceed 0.04
+            # against a limit of 0.05, so its K95 term was identically zero
+            # (docs/results/m3.md, correction note). K100 and thermal overload
+            # keep their M3 form, the latter in corrected units.
+            fixed = {
+                "en50160_k95": float(k95_beyond_budget_worst_bus_this_step),
                 "en50160_k100": k100_violations_this_step / max(n_buses, 1),
                 "thermal_overload": costs["thermal_overload"],
             }
-            for name, value in legacy.items():
+            for name, value in fixed.items():
                 spec = self.config.constraint.get(name)
-                if spec is not None:
+                if spec is None:
+                    continue
+                if name == "en50160_k95":
+                    terms[name] = spec.weight * value
+                else:
                     terms[name] = spec.weight * max(value - spec.limit, 0.0)
         else:
             for name, value in costs.items():

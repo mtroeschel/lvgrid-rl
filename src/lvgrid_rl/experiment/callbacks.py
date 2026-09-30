@@ -177,14 +177,13 @@ DEFAULT_DUALS: Mapping[str, DualSpec] = {
     # test weeks.
     "en50160_k95": DualSpec(learning_rate=4.0, lambda_max=50.0),
     "en50160_k100": DualSpec(learning_rate=4.0, lambda_max=50.0),
-    # An untrained policy produces a thermal cost of about 0.03 per control step
-    # on the training episodes (0.035 for the random controller on the test
-    # weeks). At that level the multiplier gains about 2.4 per rollout and would
-    # pass the M3 weight of 10 after four or five rollouts, some 75,000 steps,
-    # if the cost did not fall in the meantime. The bound sits an order of
-    # magnitude above that weight, so that ending at it is distinguishable from
-    # ending near it.
-    "thermal_overload": DualSpec(learning_rate=80.0, lambda_max=200.0),
+    # An untrained policy produces a thermal cost of about 0.01 per control step
+    # on the training episodes. The M4.0 validation ran with the M3 definition,
+    # which was three times the integral, and with a step of 80 and a bound of
+    # 200. Preserving that trajectory needs the multiplier three times larger
+    # (the cost is a third) and so the step nine times larger: 720 and 600. The
+    # multipliers of M4.0 read 34 to 44 in the old units, 101 to 131 in these.
+    "thermal_overload": DualSpec(learning_rate=720.0, lambda_max=600.0),
 }
 """Starting values for the validation on the M3 setup, not tuned values."""
 

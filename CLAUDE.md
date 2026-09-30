@@ -62,11 +62,13 @@ under which the multiplier can only grow.
 - **Training budget is 600,000 steps.** At 200,000 a run is still on the steep
   part of the learning curve, and the spread across seeds is budget noise rather
   than seed variance.
-- **`train.py` does not read `configs/agent/ppo.yaml`.** Runs use the
-  Stable-Baselines3 PPO defaults (`n_steps` 2,048 per worker, 16,384 per rollout
-  with eight workers, 64×64 network). All M3 and M4.0 results rest on these; the
-  file is misleading until the two are reconciled (`docs/results/m3.md`,
-  correction note).
+- **`configs/agent/ppo.yaml` is what trains.** It holds the Stable-Baselines3
+  defaults that M3 and M4.0 ran on (`n_steps` 2,048 per worker, 16,384 per
+  rollout with eight workers, 64×64 network). Until the M3 corrections the file
+  was not read at all; changing a value in it now is a new experiment.
+- **Result files from M3 and M4.0 are KPI schema 1**: their overload is three
+  times the integral. The scripts refuse to mix them with current (schema 2)
+  files; convert by dividing overload by 3, or recompute.
 - **A standard-conforming evaluation costs about 20 minutes per controller**
   over the nine test weeks. Use `--policy-only` and `--baselines-from` for
   additional seeds.

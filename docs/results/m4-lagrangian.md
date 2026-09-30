@@ -48,7 +48,7 @@ Identical to M3 except for the reward mode:
 |---|---|
 | grid, scenario | `1-LV-rural1--2-sw`, `moderate_growth` |
 | training | PPO, 600,000 steps, 8 workers, base seeds 1 to 5 (the M3 seeds) |
-| PPO settings | Stable-Baselines3 defaults, as in M3: `n_steps` 2,048 per worker (16,384 per rollout), `batch_size` 64, network 64×64. `configs/agent/ppo.yaml` is **not** read by `train.py`; see the correction note in `m3.md` |
+| PPO settings | Stable-Baselines3 defaults, as in M3: `n_steps` 2,048 per worker (16,384 per rollout), `batch_size` 64, network 64×64. `configs/agent/ppo.yaml` was not read by `train.py` at the time; see the correction note in `m3.md` |
 | reward | `lagrangian`: objective terms with the M3 weights; constraints priced by multipliers |
 | limits | K95 rate 0.05, K100 rate 0, thermal overload 0 |
 | dual settings | `DEFAULT_DUALS` in `experiment/callbacks.py` (step size 4 for the voltage rates, 80 for thermal overload; bounds 50 and 200); EMA decay 0.8; one update per rollout, about 37 per run |
@@ -105,7 +105,11 @@ satisfied by tuning until it passes.
 
 ## Results
 
-Test weeks, `EpisodeMode.EVALUATE`.
+Test weeks, `EpisodeMode.EVALUATE`. All figures are in the M3 definitions (KPI
+schema 1): overload is three times the percent-hour integral, and the thermal
+multipliers are priced against that cost. In the corrected units they read three
+times higher (101 to 131); the dual settings in the code have been rescaled so
+that a rerun would follow the same trajectory.
 
 | seed | run | final λ thermal | λ change, last 20 % | pass rate | overload | curtailed | dominated by |
 |---|---|---|---|---|---|---|---|

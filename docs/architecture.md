@@ -584,9 +584,9 @@ reward:
     action_smoothness: {weight: -0.05}
     grid_losses:       {weight: -0.1,  unit: kWh}
   constraint:
-    en50160_k95:       {weight: -10.0, limit: 0.05, shaping: potential}
+    en50160_k95:       {weight: -10.0, limit: 0.05, shaping: potential}  # per window beyond the budget
     en50160_k100:      {weight: -50.0, limit: 0.0}
-    thermal_overload:  {weight: -10.0, limit: 0.0, form: hinge, limit_pct: 100}
+    thermal_overload:  {weight: -30.0, limit: 0.0, form: hinge, limit_pct: 100}  # percent-hours / 100
   normalization: fixed_scale
 ```
 
@@ -596,6 +596,12 @@ significant under `moderate_growth` (12.6 % of steps). A minimal environment wit
 only a voltage term would optimise against a criterion that barely binds.
 
 **Mode `fixed_weights`** (starting configuration): all terms are scalarised.
+K95 is priced per window that exceeds its bus's weekly budget, at the worst bus:
+up to the budget the standard tolerates an excursion, and how the budget is spent
+is the agent's decision, steered by the potential (§6.6). The limit enters through
+the budget, not as a hinge. Thermal overload is the percent-hour integral / 100,
+weighted −30; M3 weighted −10 on a cost three times the integral, so the trade-off
+is the same (`docs/results/m3.md`, correction note).
 
 **Mode `lagrangian`** (implemented at the start of M4 and validated on the M3
 setup, where it held the constraints but did not improve on fixed weights — see
@@ -616,8 +622,7 @@ Taking the worst bus per step and summing over time is conservative — `Σ_t ma
 the rate does not carry is the weekly structure: dual ascent enforces the limit
 on average over episodes, not in every week, and the pass rate on the test weeks
 remains the reported criterion. The M3 normalisation (sum over buses divided by
-`n_buses × budget_windows`) had neither property; it survives only inside the
-`fixed_weights` path, which is kept bit-identical to M3.
+`n_buses × budget_windows`) had neither property and has been removed.
 
 The dual step sizes and bounds replace the penalty weights as hyperparameters.
 The difference is that, in theory, weights decide the solution while dual

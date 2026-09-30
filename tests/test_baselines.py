@@ -18,6 +18,7 @@ from lvgrid_rl.baselines.methods import (
 from lvgrid_rl.core.protocols import ActionSpec
 from lvgrid_rl.core.schemas import Interval, PQBudgetState
 from lvgrid_rl.env.actions import ActionMapper
+from lvgrid_rl.eval.kpi_schema import KPI_SCHEMA
 
 pytest.importorskip("gymnasium", reason="extra 'env' not installed")
 
@@ -395,7 +396,10 @@ def test_policy_points_from_a_different_set_are_rejected(tmp_path) -> None:
 
     pareto = _pareto_module()
     path = tmp_path / "val.json"
-    path.write_text(json.dumps({"set": "val", "results": []}), encoding="utf-8")
+    path.write_text(
+        json.dumps({"set": "val", "kpi_schema": KPI_SCHEMA, "results": []}),
+        encoding="utf-8",
+    )
     with pytest.raises(ValueError, match="not 'test'"):
         pareto.load_policy_points([path], "test")
 
@@ -411,6 +415,7 @@ def test_policy_points_are_read_from_existing_results(tmp_path) -> None:
         json.dumps(
             {
                 "set": "test",
+                "kpi_schema": KPI_SCHEMA,
                 "results": [
                     {
                         "controller": "policy",

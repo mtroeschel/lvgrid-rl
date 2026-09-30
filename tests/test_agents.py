@@ -230,3 +230,51 @@ def test_multipliers_reach_the_environment_during_training() -> None:
     # The stress weeks overload the transformer without control, so a random
     # policy must have pushed the thermal multiplier off zero.
     assert callback.multipliers["thermal_overload"] > 0.0
+
+
+# ---------------------------------------------------------------------------
+# Agent configuration file
+# ---------------------------------------------------------------------------
+
+
+def test_agent_config_reproduces_the_settings_m3_was_trained_with() -> None:
+    """``configs/agent/ppo.yaml`` builds the same PPO as the library defaults.
+
+    Up to M4.0 train.py never read the file and ran on the Stable-Baselines3
+    defaults. The file now states those defaults and is read, which is only a
+    correction rather than a new experiment if the resulting model is
+    identical: same hyperparameters, same network, same initial weights.
+    """
+    import gymnasium as gym
+    import torch
+
+    def build(spec: AgentSpec):
+        env = gym.make("Pendulum-v1")
+        return make_agent(spec, env, TIMEBASE, seed=3)
+
+    from_file = build(AgentSpec.from_yaml("configs/agent/ppo.yaml"))
+    library = build(AgentSpec(algo="ppo"))
+    for name in (
+        "n_steps",
+        "batch_size",
+        "n_epochs",
+        "gae_lambda",
+        "ent_coef",
+        "gamma",
+    ):
+        assert getattr(from_file, name) == getattr(library, name), name
+    assert from_file.learning_rate == library.learning_rate
+    assert from_file.clip_range(1.0) == library.clip_range(1.0)
+    left = from_file.policy.state_dict()
+    right = library.policy.state_dict()
+    assert left.keys() == right.keys()
+    for key in left:
+        assert torch.equal(left[key], right[key]), key
+
+
+def test_agent_config_rejects_unknown_keys(tmp_path) -> None:
+    """A misspelt section must not silently fall back to library defaults."""
+    path = tmp_path / "agent.yaml"
+    path.write_text("algo: ppo\nhyperparam:\n  n_steps: 512\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="hyperparam"):
+        AgentSpec.from_yaml(path)

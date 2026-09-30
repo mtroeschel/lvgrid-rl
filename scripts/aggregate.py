@@ -34,6 +34,8 @@ from pathlib import Path
 
 import numpy as np
 
+from lvgrid_rl.eval.kpi_schema import KPI_SCHEMA, check_kpi_schema
+
 __all__ = [
     "iqm",
     "bootstrap_ci",
@@ -224,6 +226,7 @@ def load_policy_rows(paths: Sequence[Path], set_name: str) -> list[dict]:
     rows = []
     for path in paths:
         payload = json.loads(path.read_text(encoding="utf-8"))
+        check_kpi_schema(payload, path)
         if payload.get("set") != set_name:
             raise ValueError(
                 f"{path} holds results for set {payload.get('set')!r}, not {set_name!r}"
@@ -274,6 +277,7 @@ def main() -> None:
     advantage_payload = None
     if args.pareto is not None:
         pareto_payload = json.loads(args.pareto.read_text(encoding="utf-8"))
+        check_kpi_schema(pareto_payload, args.pareto)
         scale = uncontrolled_overload(pareto_payload)
         caps = [
             p["curtailed_mwh"]
@@ -393,6 +397,7 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     payload = {
         "set": args.set_name,
+        "kpi_schema": KPI_SCHEMA,
         "n_seeds": len(rows),
         "per_seed": rows,
         "aggregates": [

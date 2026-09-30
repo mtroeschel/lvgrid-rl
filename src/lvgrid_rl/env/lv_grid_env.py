@@ -141,9 +141,7 @@ class LVGridEnv(gym.Env):
         self.steps_per_control = self.config.control_dt_min // self.config.sim_dt_min
         self.samples_per_window = 10 // self.config.sim_dt_min
         self.aggregator = PQAggregator(model.n_evaluated_buses, self.samples_per_window)
-        self.reward_composer = RewardComposer(
-            self.config.reward, self.aggregator.budget_windows
-        )
+        self.reward_composer = RewardComposer(self.config.reward)
 
         observation_spec = self.config.observation
         if not observation_spec.forecast_series:
@@ -200,6 +198,18 @@ class LVGridEnv(gym.Env):
         multipliers itself.
         """
         self.reward_composer.set_multipliers(values)
+
+    def _windows_beyond_budget(self, before: np.ndarray) -> int:
+        """K95 windows of this step that exceeded their bus's weekly budget.
+
+        Only these break the criterion: up to the budget the standard tolerates
+        an excursion, and spending the budget is a decision the agent is allowed
+        to make (§6.6). Taken at the worst bus, like the constraint costs.
+        """
+        budget = self.aggregator.budget_windows
+        after = np.asarray(self.aggregator.state().violations_k95_count)
+        excess = np.maximum(after - budget, 0) - np.maximum(before - budget, 0)
+        return int(excess.max(initial=0))
 
     def _budget_potential(self) -> float:
         """Current value of the shaping potential."""
@@ -364,6 +374,10 @@ class LVGridEnv(gym.Env):
         # Per bus as well as summed: the constraint costs are rates at the worst
         # bus, and a sum over buses cannot be turned back into that.
         k95_per_bus = np.zeros(self.model.n_evaluated_buses, dtype=np.int64)
+        # Counts at the start of the step, including a randomised initial
+        # budget, so that the windows *beyond* each bus's budget can be told
+        # apart from those the standard still tolerates.
+        k95_before_step = np.asarray(self.aggregator.state().violations_k95_count).copy()
         k100_per_bus = np.zeros(self.model.n_evaluated_buses, dtype=np.int64)
         overload_excess = 0.0
         losses_mwh = 0.0
@@ -444,7 +458,12 @@ class LVGridEnv(gym.Env):
             n_buses_outside_k100=outside_k100,
             max_line_loading_percent=float("nan"),
             max_trafo_loading_percent=float("nan"),
-            overload_excess_percent=overload_excess,
+            # The mean over the inner samples, not their sum: the reward
+            # multiplies by the duration of the whole control step, and a sum
+            # would count each sample's excess for the full step -- three times
+            # the integral at 5 on 15 minutes. That was the M3 definition
+            # (docs/results/m3.md, correction note).
+            overload_excess_percent=overload_excess / max(inner_steps, 1),
             losses_mw=losses_mwh / max(self.dt_hours * max(inner_steps, 1), 1e-12),
             converged=converged,
         )
@@ -458,6 +477,9 @@ class LVGridEnv(gym.Env):
             dt_hours=self.dt_hours * max(inner_steps, 1),
             k95_worst_bus_this_step=int(k95_per_bus.max(initial=0)),
             k100_worst_bus_this_step=int(k100_per_bus.max(initial=0)),
+            k95_beyond_budget_worst_bus_this_step=self._windows_beyond_budget(
+                k95_before_step
+            ),
             windows_per_step=self.config.control_dt_min / 10,
         )
         reward_total = step_reward.total

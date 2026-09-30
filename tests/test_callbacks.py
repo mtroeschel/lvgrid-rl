@@ -265,3 +265,23 @@ def test_history_is_written_at_the_end(tmp_path) -> None:
     payload = json.loads((tmp_path / "lagrangian.json").read_text(encoding="utf-8"))
     assert payload["final_multipliers"] == callback.multipliers
     assert len(payload["history"]) == 1
+
+
+def test_thermal_dual_settings_preserve_the_validated_trajectory() -> None:
+    """Corrected units, same run: the price times the cost stays the same.
+
+    The thermal cost is a third of the M3 definition. With the step nine times
+    and the bound three times the M4.0 values, the multiplier is exactly three
+    times larger at every update, so ``lambda * cost`` -- the only thing the
+    reward sees -- is unchanged.
+    """
+    old_duals = dict(DEFAULT_DUALS)
+    old_duals["thermal_overload"] = DualSpec(learning_rate=80.0, lambda_max=200.0)
+    old, _ = _lagrangian(duals=old_duals)
+    new, _ = _lagrangian(duals=DEFAULT_DUALS)
+    for cost in (0.03, 0.02, 0.01, 0.004, 0.001):
+        _rollout(old, [{"thermal_overload": cost}])
+        _rollout(new, [{"thermal_overload": cost / 3}])
+        assert new.multipliers["thermal_overload"] * (cost / 3) == pytest.approx(
+            old.multipliers["thermal_overload"] * cost
+        )

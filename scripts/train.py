@@ -19,7 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from lvgrid_rl.agents.factory import AgentSpec, make_agent
@@ -30,6 +30,7 @@ from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
 from lvgrid_rl.env.factory import make_env
 from lvgrid_rl.env.lv_grid_env import EnvConfig
 from lvgrid_rl.env.reward import RewardConfig, RewardMode
+from lvgrid_rl.eval.kpi_schema import KPI_SCHEMA
 from lvgrid_rl.eval.runner import run_controller
 from lvgrid_rl.experiment.callbacks import (
     DEFAULT_DUALS,
@@ -42,7 +43,12 @@ from lvgrid_rl.experiment.reproducibility import RunManifest, SeedSet
 def build_parser() -> argparse.ArgumentParser:
     """Command line interface."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--algo", default="ppo")
+    parser.add_argument(
+        "--agent-config",
+        type=Path,
+        default=Path("configs/agent/ppo.yaml"),
+        help="agent specification: algorithm, hyperparameters, policy settings",
+    )
     parser.add_argument("--steps", type=int, default=20_000)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--seed", type=int, default=1)
@@ -180,9 +186,16 @@ def main() -> None:
 
         return factory
 
+    spec = AgentSpec.from_yaml(args.agent_config)
+    if args.n_steps is not None:
+        spec = replace(spec, hyperparams={**spec.hyperparams, "n_steps": args.n_steps})
+
     manifest = RunManifest.create(
         config={
-            "algo": args.algo,
+            # The full agent specification, not just the algorithm name: in M3
+            # the hash covered only "ppo", and the hyperparameters actually
+            # used were nowhere on record.
+            "agent": spec.as_config(),
             "code": args.code,
             "scenario": args.scenario,
             "steps": args.steps,
@@ -220,10 +233,6 @@ def main() -> None:
         filename=str(run_dir / "monitor"),
     )
 
-    hyperparams: dict[str, int] = {}
-    if args.n_steps is not None:
-        hyperparams["n_steps"] = args.n_steps
-    spec = AgentSpec(algo=args.algo, hyperparams=hyperparams)
     model = make_agent(
         spec, vec_env, timebase, seed=seeds.train, tensorboard_log=str(run_dir / "tb")
     )
@@ -318,6 +327,7 @@ def main() -> None:
                 "baselines_tuned": is_tuned,
                 "baseline_params": tuned,
                 "eval_set": args.eval_set,
+                "kpi_schema": KPI_SCHEMA,
                 "episode_mode": "evaluate",
                 "results": rows,
             },

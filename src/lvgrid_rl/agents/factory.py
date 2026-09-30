@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from lvgrid_rl.data.timebase import TimeBase
@@ -86,6 +87,33 @@ class AgentSpec:
     hyperparams: Mapping[str, Any] = field(default_factory=dict)
     policy_kwargs: Mapping[str, Any] = field(default_factory=dict)
     gamma: float | None = None
+
+    @classmethod
+    def from_yaml(cls, path: Path | str) -> AgentSpec:
+        """Read a specification from ``configs/agent/*.yaml``.
+
+        Unknown top-level keys are rejected rather than ignored: a misspelt
+        ``hyperparam`` would otherwise leave the run on library defaults while
+        the file claims otherwise -- the defect M3 had with this very file.
+        """
+        import yaml
+
+        payload = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+        known = {"algo", "policy", "hyperparams", "policy_kwargs", "gamma"}
+        unknown = set(payload) - known
+        if unknown:
+            raise ValueError(f"Unknown keys in {path}: {sorted(unknown)}")
+        return cls(**payload)
+
+    def as_config(self) -> dict[str, Any]:
+        """Plain dictionary for the run manifest and its configuration hash."""
+        return {
+            "algo": self.algo,
+            "policy": self.policy,
+            "hyperparams": dict(self.hyperparams),
+            "policy_kwargs": dict(self.policy_kwargs),
+            "gamma": self.gamma,
+        }
 
     def __post_init__(self) -> None:
         if self.algo not in SUPPORTED_ALGOS:
