@@ -597,13 +597,35 @@ only a voltage term would optimise against a criterion that barely binds.
 
 **Mode `fixed_weights`** (starting configuration): all terms are scalarised.
 
-**Mode `lagrangian`** (planned alternative): only `objective` terms form the
-reward; each `constraint` term is additionally reported as a cost signal in
-`info["cost/<name>"]`. A `LagrangianCallback` estimates the expected cost `J_c`
-per episode and updates multipliers by dual ascent `λ ← [λ + η·(J_c − d)]₊`; a
-wrapper forms `r_eff = r_obj − Σ λ_i·c_i`. The practical advantage here: the
-limits `d` are stated in physical or normative units. For EN 50160, `d = 0.05` is
-**exactly the standard's criterion** — no penalty weight needs guessing.
+**Mode `lagrangian`** (implemented at the start of M4 and validated on the M3
+setup, where it held the constraints but did not improve on fixed weights — see
+`docs/results/m4-lagrangian.md`): only `objective` terms form the reward; each
+`constraint` term is reported as a cost signal in `info["cost/<name>"]` and
+priced by a multiplier, `r = r_obj − Σ λ_i·c_i`, inside the `RewardComposer`. A
+`LagrangianCallback` estimates the mean cost per control step `J_c` once per
+rollout, smooths it with an EMA, and updates the multipliers by dual ascent
+`λ ← clip(λ + η·(J_c − d), 0, λ_max)`, pushing them to every worker. The
+practical advantage: the limits `d` are stated in physical or normative units.
+
+That holds for the voltage terms only because their costs are **rates**: the
+violating windows at the worst bus of a control step, divided by the windows a
+step closes (1.5 at 15 minutes). Their mean is a share of windows outside the
+band, so `d = 0.05` for K95 is the standard's criterion in the cost's own unit.
+Taking the worst bus per step and summing over time is conservative — `Σ_t max_b
+≥ max_b Σ_t` — so a mean within the limit implies every bus is within it. What
+the rate does not carry is the weekly structure: dual ascent enforces the limit
+on average over episodes, not in every week, and the pass rate on the test weeks
+remains the reported criterion. The M3 normalisation (sum over buses divided by
+`n_buses × budget_windows`) had neither property; it survives only inside the
+`fixed_weights` path, which is kept bit-identical to M3.
+
+The dual step sizes and bounds replace the penalty weights as hyperparameters.
+The difference is that, in theory, weights decide the solution while dual
+settings decide how fast it is reached. With a limit of zero (thermal overload,
+K100) `J_c − d` is never negative, so the multiplier only grows: it settles at
+the smallest price that drives the cost to zero, or runs into `λ_max`, which
+means the run degenerated into a fixed weight. The callback records either
+outcome in `lagrangian.json`.
 
 Two pitfalls worth knowing before implementing:
 
@@ -1381,7 +1403,7 @@ finished shield, and M9 is additive.
 | D2 | voltage criterion | **EN 50160 percentile criterion** (K95 on ten-minute means per week, K100 with −15 %) | §6.6 |
 | D3 | heat pump model | **stage 1: buffer store** for M4; `ThermalModel` protocol admits 1R1C later | §5 |
 | D4 | reactive power | Q implemented as an action option, main study P-dominated; Q required for B3 regardless | §5 |
-| D5 | reward weighting | **fixed weights first**, constrained RL with Lagrange multipliers as a full alternative | §6.4 |
+| D5 | reward weighting | **fixed weights for M4.** The Lagrangian mode was validated on the M3 setup: it holds the constraints but reaches no better operating point (three of five policies dominated by a cap), so it stays the comparison arm for M7 (`docs/results/m4-lagrangian.md`) | §6.4 |
 | D6 | forecasts | **error model with `perfect` as a special case** | §6.7 |
 | D7 | connection points | buses with a load **or** generator/storage element; exclusion list for equivalent infeeds; "all buses" as a sensitivity variant | §4.2 |
 | D8 | safety layer | not a switch but **three orthogonal axes** (feasibility model × mechanism × learning coupling) plus its own KPIs | §7.1 |

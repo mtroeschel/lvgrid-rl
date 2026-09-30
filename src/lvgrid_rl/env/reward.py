@@ -159,6 +159,10 @@ class RewardComposer:
         k100_violations_this_step: int,
         n_buses: int,
         dt_hours: float,
+        *,
+        k95_worst_bus_this_step: int,
+        k100_worst_bus_this_step: int,
+        windows_per_step: float,
     ) -> RewardBreakdown:
         """Evaluate the reward for one control step.
 
@@ -176,6 +180,29 @@ class RewardComposer:
             k100_violations_this_step: Same for the absolute band.
             n_buses: Number of assessed connection points, for normalisation.
             dt_hours: Duration of the control step.
+            k95_worst_bus_this_step: Largest number of K95 windows that closed
+                outside the band at any single bus during this step.
+            k100_worst_bus_this_step: Same for the absolute band.
+            windows_per_step: Assessment windows per control step on average,
+                ``control_dt / 10 min`` -- 1.5 at a 15-minute control step.
+
+        **What the costs mean.** The voltage costs are *rates*: the violating
+        windows at the worst bus of the step, divided by the windows a step
+        closes on average. Their mean over any stretch that is a multiple of
+        the window grid is therefore a share of windows outside the band, which
+        is the quantity EN 50160 bounds -- so the K95 limit of 0.05 is the
+        standard's criterion in the cost's own unit, and the dual ascent in
+        :class:`~lvgrid_rl.experiment.callbacks.LagrangianCallback` compares
+        like with like.
+
+        Taking the worst bus per step and summing over time is conservative:
+        ``sum_t max_b v[b, t] >= max_b sum_t v[b, t]``, so a mean at or below
+        the limit implies that every bus is within it. It is exact when the same
+        bus is the worst one throughout, which on a radial feeder is the usual
+        case. What the rate does *not* carry is the weekly structure: a
+        constraint on the expected rate is satisfied on average over episodes,
+        not in every week, and the pass rate on the test weeks remains the
+        criterion that is reported.
         """
         if not metrics.converged:
             # A diverged power flow is a defined event, not an exception. It
@@ -187,10 +214,9 @@ class RewardComposer:
                 costs=dict.fromkeys(self.config.constraint, float("nan")),
             )
 
-        scale = max(n_buses, 1) * self.budget_windows
         costs = {
-            "en50160_k95": k95_violations_this_step / scale,
-            "en50160_k100": k100_violations_this_step / max(n_buses, 1),
+            "en50160_k95": k95_worst_bus_this_step / windows_per_step,
+            "en50160_k100": k100_worst_bus_this_step / windows_per_step,
             "thermal_overload": metrics.overload_excess_percent / 100.0 * dt_hours,
         }
         objective = {
@@ -206,7 +232,21 @@ class RewardComposer:
                 terms[name] = spec.weight * value
 
         if self.config.mode is RewardMode.FIXED_WEIGHTS:
-            for name, value in costs.items():
+            # The M3 formulation, kept bit-identical so that the M3 runs remain
+            # the reference the Lagrangian variant is validated against. Its
+            # voltage terms use their own normalisation, not the rates above,
+            # and the K95 hinge compares a per-step value against the weekly
+            # share: a step closes at most two windows per bus, so the value
+            # never exceeds 2 / budget_windows = 0.04 < 0.05 and **the K95 term
+            # is identically zero**. The voltage signal in M3 came from the
+            # budget potential alone (docs/results/m3.md, correction note).
+            scale = max(n_buses, 1) * self.budget_windows
+            legacy = {
+                "en50160_k95": k95_violations_this_step / scale,
+                "en50160_k100": k100_violations_this_step / max(n_buses, 1),
+                "thermal_overload": costs["thermal_overload"],
+            }
+            for name, value in legacy.items():
                 spec = self.config.constraint.get(name)
                 if spec is not None:
                     terms[name] = spec.weight * max(value - spec.limit, 0.0)

@@ -1,14 +1,20 @@
-"""Tests of the training progress display."""
+"""Tests of the training callbacks: progress display and dual ascent."""
 
 from __future__ import annotations
 
 import io
+import json
+from types import SimpleNamespace
 
 import pytest
 
 pytest.importorskip("stable_baselines3", reason="extra 'rl' not installed")
 
+from lvgrid_rl.env.reward import RewardConfig, RewardMode  # noqa: E402
 from lvgrid_rl.experiment.callbacks import (  # noqa: E402
+    DEFAULT_DUALS,
+    DualSpec,
+    LagrangianCallback,
     TrainingProgress,
     format_duration,
 )
@@ -129,3 +135,133 @@ def test_callback_never_stops_training() -> None:
     callback = _callback(100, stream, model)
     model.num_timesteps = 50
     assert callback.on_step() is True
+
+
+# ---------------------------------------------------------------------------
+# LagrangianCallback
+# ---------------------------------------------------------------------------
+
+
+class _FakeVecEnv:
+    """Records what the callback pushes to the workers."""
+
+    def __init__(self) -> None:
+        self.pushed: list[dict] = []
+
+    def env_method(self, name: str, values: dict) -> None:
+        assert name == "set_multipliers"
+        self.pushed.append(dict(values))
+
+
+class _FakeLogger:
+    def __init__(self) -> None:
+        self.records: dict[str, float] = {}
+
+    def record(self, key: str, value: float) -> None:
+        self.records[key] = value
+
+
+def _lagrangian(**kwargs) -> tuple[LagrangianCallback, _FakeVecEnv]:
+    config = RewardConfig(mode=RewardMode.LAGRANGIAN)
+    callback = LagrangianCallback(config, **kwargs)
+    env = _FakeVecEnv()
+    callback.model = SimpleNamespace(  # type: ignore[assignment]
+        logger=_FakeLogger(), get_env=lambda: env, num_timesteps=0
+    )
+    return callback, env
+
+
+def _rollout(callback: LagrangianCallback, costs: list[dict]) -> None:
+    for step in costs:
+        callback.locals = {"infos": [{f"cost/{k}": v for k, v in step.items()}]}
+        callback._on_step()
+    callback._on_rollout_end()
+
+
+def test_multiplier_rises_above_the_limit_and_falls_below_it() -> None:
+    """Dual ascent: ``lambda += eta * (J - d)``, clipped at zero."""
+    duals = {
+        "en50160_k95": DualSpec(learning_rate=10.0, lambda_max=50.0),
+        "en50160_k100": DualSpec(learning_rate=1.0, lambda_max=50.0),
+        "thermal_overload": DualSpec(learning_rate=1.0, lambda_max=50.0),
+    }
+    callback, _ = _lagrangian(duals=duals, ema_decay=0.0)
+    _rollout(callback, [{"en50160_k95": 0.15}, {"en50160_k95": 0.25}])
+    assert callback.multipliers["en50160_k95"] == pytest.approx(10.0 * (0.20 - 0.05))
+    _rollout(callback, [{"en50160_k95": 0.0}])
+    assert callback.multipliers["en50160_k95"] == pytest.approx(1.5 - 0.5)
+    _rollout(callback, [{"en50160_k95": 0.0}] * 3)
+    assert callback.multipliers["en50160_k95"] == pytest.approx(0.5)
+    _rollout(callback, [{"en50160_k95": 0.0}])
+    assert callback.multipliers["en50160_k95"] == pytest.approx(0.0, abs=1e-12)
+    _rollout(callback, [{"en50160_k95": 0.0}])
+    assert callback.multipliers["en50160_k95"] == 0.0  # clipped, not negative
+
+
+def test_multiplier_is_bounded_and_the_bound_is_visible() -> None:
+    """A multiplier at its bound is a fixed weight in disguise; it must show."""
+    duals = dict(DEFAULT_DUALS)
+    duals["thermal_overload"] = DualSpec(learning_rate=100.0, lambda_max=5.0)
+    callback, _ = _lagrangian(duals=duals, ema_decay=0.0)
+    _rollout(callback, [{"thermal_overload": 1.0}])
+    assert callback.multipliers["thermal_overload"] == 5.0
+    assert callback.history[-1]["thermal_overload"]["multiplier"] == 5.0
+
+
+def test_estimate_is_smoothed_across_rollouts() -> None:
+    duals = {
+        name: DualSpec(learning_rate=1.0, lambda_max=100.0) for name in DEFAULT_DUALS
+    }
+    callback, _ = _lagrangian(duals=duals, ema_decay=0.5)
+    _rollout(callback, [{"thermal_overload": 1.0}])
+    _rollout(callback, [{"thermal_overload": 0.0}])
+    assert callback.history[-1]["thermal_overload"]["cost_estimate"] == pytest.approx(0.5)
+    assert callback.multipliers["thermal_overload"] == pytest.approx(1.5)
+
+
+def test_diverged_steps_do_not_poison_the_estimate() -> None:
+    """A diverged power flow reports NaN costs; they are skipped, not averaged."""
+    callback, _ = _lagrangian(ema_decay=0.0)
+    _rollout(
+        callback,
+        [{"thermal_overload": float("nan")}, {"thermal_overload": 0.01}],
+    )
+    assert callback.history[-1]["thermal_overload"]["cost_mean"] == pytest.approx(0.01)
+
+
+def test_multipliers_reach_the_workers_after_every_rollout() -> None:
+    callback, env = _lagrangian(ema_decay=0.0)
+    _rollout(callback, [{"thermal_overload": 0.05}])
+    assert env.pushed[-1] == callback.multipliers
+    assert env.pushed[-1]["thermal_overload"] > 0.0
+
+
+def test_fixed_weight_mode_is_refused() -> None:
+    """In fixed_weights mode the multipliers would silently be ignored."""
+    with pytest.raises(ValueError, match="LAGRANGIAN"):
+        LagrangianCallback(RewardConfig())
+
+
+def test_every_constraint_needs_dual_settings() -> None:
+    config = RewardConfig(mode=RewardMode.LAGRANGIAN)
+    with pytest.raises(ValueError, match="thermal_overload"):
+        LagrangianCallback(config, duals={"en50160_k95": DEFAULT_DUALS["en50160_k95"]})
+
+
+def test_off_policy_algorithms_are_refused() -> None:
+    """A replay buffer would mix rewards computed with different multipliers."""
+    from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
+
+    callback, _ = _lagrangian()
+    callback.model = OffPolicyAlgorithm.__new__(OffPolicyAlgorithm)  # type: ignore[assignment]
+    with pytest.raises(TypeError, match="on-policy"):
+        callback._on_training_start()
+
+
+def test_history_is_written_at_the_end(tmp_path) -> None:
+    callback, _ = _lagrangian(ema_decay=0.0, history_path=tmp_path / "lagrangian.json")
+    _rollout(callback, [{"thermal_overload": 0.05}])
+    callback._on_training_end()
+    payload = json.loads((tmp_path / "lagrangian.json").read_text(encoding="utf-8"))
+    assert payload["final_multipliers"] == callback.multipliers
+    assert len(payload["history"]) == 1

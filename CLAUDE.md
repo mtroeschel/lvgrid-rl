@@ -27,12 +27,12 @@ rolls states forward hypothetically. Its `xfail(strict=True)` test will break th
 build the moment `components/bess.py` exists — that is intended, and the test is
 then written out rather than the marker removed.
 
-**One decision is open and should be settled before the first asset model**
-(`docs/results/m3.md`, consequence 2): keep the fixed reward weights and report
-the Pareto frontier, or switch to the Lagrangian mode where the limits are
-normative (`d = 0.05` is the EN 50160 criterion itself) and the agent minimises
-curtailment subject to them. The mode exists since M3 and has never been used. It
-decides how every M4 result is to be read. Ask rather than assume.
+**The reward mode for M4 is settled: fixed weights** (`docs/results/m4-lagrangian.md`,
+§13 D5). The Lagrangian mode was validated on the M3 setup against pre-registered
+criteria: it holds the constraints but three of five policies were dominated by a
+fixed cap. It stays in the code as the M7 comparison arm. Do not reopen it without
+a new pre-registered test; the known weak point is the thermal limit of zero,
+under which the multiplier can only grow.
 
 ## Three rules that come before everything else
 
@@ -62,6 +62,11 @@ decides how every M4 result is to be read. Ask rather than assume.
 - **Training budget is 600,000 steps.** At 200,000 a run is still on the steep
   part of the learning curve, and the spread across seeds is budget noise rather
   than seed variance.
+- **`train.py` does not read `configs/agent/ppo.yaml`.** Runs use the
+  Stable-Baselines3 PPO defaults (`n_steps` 2,048 per worker, 16,384 per rollout
+  with eight workers, 64×64 network). All M3 and M4.0 results rest on these; the
+  file is misleading until the two are reconciled (`docs/results/m3.md`,
+  correction note).
 - **A standard-conforming evaluation costs about 20 minutes per controller**
   over the nine test weeks. Use `--policy-only` and `--baselines-from` for
   additional seeds.
