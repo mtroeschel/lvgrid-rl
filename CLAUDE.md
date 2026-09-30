@@ -23,8 +23,10 @@ M0 to M3 are complete. **M4 is in progress: the full actuator set** — battery
 storage, heat pump with a buffer model, EV charge points with a session model,
 plus action mode 2 (per asset type). The steps are in `docs/architecture.md`
 §12; 4.0 (reward mode), the M3 corrections, 4.1 (battery model) and 4.2a
-(batteries in the environment, `train.py --storage`) are done; 4.2b (action
-mode 2) is next. **Invariant I2 is satisfied since 4.1**: asset dynamics
+(batteries in the environment, `train.py --storage`) are done. 4.2b (action
+mode 2, decision D14: weights shared per asset kind, an individual setpoint per
+asset) is in two parts: the per-asset observation layout is done, the shared
+policy class is next. **Invariant I2 is satisfied since 4.1**: asset dynamics
 are pure functions over a frozen `AssetState`. Its test in
 `tests/test_invariants.py` is parametrised over asset types — every new asset
 model (heat pump, charge point) adds a case to `_i2_assets()`, it does not get a
