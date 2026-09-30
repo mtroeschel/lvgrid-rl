@@ -31,6 +31,7 @@ from lvgrid_rl.baselines.methods import (
 from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
 from lvgrid_rl.env.factory import StorageSizing, make_env
 from lvgrid_rl.env.lv_grid_env import EnvConfig
+from lvgrid_rl.env.obs import ObservationLayoutMode, ObservationSpec
 from lvgrid_rl.eval.kpi_schema import KPI_SCHEMA, check_kpi_schema
 from lvgrid_rl.eval.runner import run_controller
 
@@ -61,6 +62,17 @@ def main() -> None:
     parser.add_argument("--tuned", type=Path, default=Path("configs/baseline/tuned.json"))
     parser.add_argument("--algo", default="ppo")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--torch-threads",
+        type=int,
+        default=1,
+        help="intra-op threads for PyTorch. One is faster for networks this "
+        "small: between environment steps a larger pool falls asleep and has to "
+        "be woken for every one of the many small operations of the shared "
+        "policy (7.6 ms per decision at seven threads, 1.0 ms at one), and a "
+        "minibatch update is no slower. Recorded, because the thread count can "
+        "change the order of floating-point reductions.",
+    )
     parser.add_argument(
         "--policy-only",
         action="store_true",
@@ -94,6 +106,9 @@ def main() -> None:
     if not checkpoint.exists():
         raise FileNotFoundError(f"No checkpoint at {checkpoint}")
 
+    import torch
+
+    torch.set_num_threads(args.torch_threads)
     module_name, _, attribute = SUPPORTED_ALGOS[args.algo].rpartition(".")
     algo_class = getattr(__import__(module_name, fromlist=[attribute]), attribute)
     model = algo_class.load(checkpoint, device="cpu")
@@ -104,19 +119,19 @@ def main() -> None:
     # The environment the policy was trained in. Runs from before M4 have no
     # env.json and are PV only.
     env_file = args.run_dir / "env.json"
-    stored = (
-        json.loads(env_file.read_text(encoding="utf-8")).get("storage")
-        if env_file.exists()
-        else None
+    env_record = (
+        json.loads(env_file.read_text(encoding="utf-8")) if env_file.exists() else {}
     )
+    stored = env_record.get("storage")
     storage = StorageSizing(**stored) if stored is not None else None
+    obs_layout = ObservationLayoutMode(env_record.get("obs_layout", "flat"))
 
     def build():
         return make_env(
             code=args.code,
             scenario=args.scenario,
             set_name=args.set_name,
-            config=EnvConfig(),
+            config=EnvConfig(observation=ObservationSpec(layout=obs_layout)),
             episode_spec=spec,
             seed=args.seed,
             storage=storage,

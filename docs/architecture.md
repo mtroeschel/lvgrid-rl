@@ -619,6 +619,19 @@ Three modes, all through the same `ActionMapper`:
    is neither affine nor invertible (I4), which rules out the `store_executed`
    coupling the certified arm is fixed to (§7.1, §7.2). Learned
    characteristics remain a candidate reference method, not an action mode.
+
+   *Implemented as `SharedAssetPolicy`* (`agents/shared_policy.py`,
+   `configs/agent/ppo_shared.yaml`; `train.py` selects the per-asset layout when
+   it is chosen). A global encoder and one block encoder per kind; the
+   **context** is the global embedding plus the *mean* of the block embeddings
+   of each kind, which is what makes it independent of the fleet size; one actor
+   head per kind maps context and an asset's own embedding to its setpoint; the
+   critic reads the context. The exploration noise is one log standard deviation
+   per kind, not per asset. Tested: swapping two assets of a kind swaps their
+   actions and nothing else; the parameter set is identical for three and for
+   eight batteries, so weights load across fleet sizes; a fleet duplicated gives
+   the same actions. PPO settings are those of mode 1, so the two modes differ
+   in the policy alone. The comparison of the two on KPIs is still to be run.
 3. **Multi-agent** — one agent per actuator or per feeder; the environment
    additionally offers a PettingZoo-compatible interface.
 

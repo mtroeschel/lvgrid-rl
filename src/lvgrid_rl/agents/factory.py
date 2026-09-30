@@ -22,7 +22,13 @@ from typing import Any
 
 from lvgrid_rl.data.timebase import TimeBase
 
-__all__ = ["AgentSpec", "SUPPORTED_ALGOS", "make_agent", "resolve_gamma"]
+__all__ = [
+    "AgentSpec",
+    "CUSTOM_POLICIES",
+    "SUPPORTED_ALGOS",
+    "make_agent",
+    "resolve_gamma",
+]
 
 SUPPORTED_ALGOS: Mapping[str, str] = {
     "ppo": "stable_baselines3.PPO",
@@ -36,6 +42,11 @@ SUPPORTED_ALGOS: Mapping[str, str] = {
     "recurrent_ppo": "sb3_contrib.RecurrentPPO",
 }
 """Algorithm name -> import path. Adding one is a line, not a script."""
+
+CUSTOM_POLICIES: Mapping[str, str] = {
+    "SharedAssetPolicy": "lvgrid_rl.agents.shared_policy.SharedAssetPolicy",
+}
+"""Policies of this project, by the name a configuration file uses."""
 
 
 def resolve_gamma(timebase: TimeBase, requested: float | None = None) -> float:
@@ -151,13 +162,27 @@ def make_agent(
     """
     algo_class = _import(SUPPORTED_ALGOS[spec.algo])
     gamma = resolve_gamma(timebase, spec.gamma)
+    policy: Any = spec.policy
+    policy_kwargs = dict(spec.policy_kwargs)
+    if spec.policy in CUSTOM_POLICIES:
+        policy = _import(CUSTOM_POLICIES[spec.policy])
+        # The layout describes the grid, not the policy, so it comes from the
+        # environment rather than from the configuration file.
+        policy_kwargs["layout"] = _observation_layout(env)
     return algo_class(
-        spec.policy,
+        policy,
         env,
         gamma=gamma,
         seed=seed,
         verbose=0,
         tensorboard_log=tensorboard_log,
-        policy_kwargs=dict(spec.policy_kwargs) or None,
+        policy_kwargs=policy_kwargs or None,
         **dict(spec.hyperparams),
     )
+
+
+def _observation_layout(env):
+    """The per-asset layout of a plain or vectorised environment."""
+    if hasattr(env, "get_attr"):  # a VecEnv, possibly in worker processes
+        return env.get_attr("observation_layout")[0]
+    return env.unwrapped.observation_layout

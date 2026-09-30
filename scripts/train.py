@@ -22,13 +22,14 @@ import time
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from lvgrid_rl.agents.factory import AgentSpec, make_agent
+from lvgrid_rl.agents.factory import CUSTOM_POLICIES, AgentSpec, make_agent
 from lvgrid_rl.agents.policy_controller import PolicyController
 from lvgrid_rl.baselines.methods import DoNothing, FixedCap, PUDroop, asset_bus_positions
 from lvgrid_rl.data.timebase import TimeBase
 from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
 from lvgrid_rl.env.factory import DEFAULT_STORAGE, StorageSizing, make_env
 from lvgrid_rl.env.lv_grid_env import EnvConfig
+from lvgrid_rl.env.obs import ObservationLayoutMode, ObservationSpec
 from lvgrid_rl.env.reward import RewardConfig, RewardMode
 from lvgrid_rl.eval.kpi_schema import KPI_SCHEMA
 from lvgrid_rl.eval.runner import run_controller
@@ -95,6 +96,17 @@ def build_parser() -> argparse.ArgumentParser:
         "The report recomputes every baseline, which is deterministic and "
         "identical across runs, and costs over an hour per run; the acceptance "
         "figure comes from scripts/evaluate.py on the test weeks either way.",
+    )
+    parser.add_argument(
+        "--torch-threads",
+        type=int,
+        default=1,
+        help="intra-op threads for PyTorch. One is faster for networks this "
+        "small: between environment steps a larger pool falls asleep and has to "
+        "be woken for every one of the many small operations of the shared "
+        "policy (7.6 ms per decision at seven threads, 1.0 ms at one), and a "
+        "minibatch update is no slower. Recorded, because the thread count can "
+        "change the order of floating-point reductions.",
     )
     parser.add_argument(
         "--storage",
@@ -171,9 +183,25 @@ def main() -> None:
     if not is_tuned:
         print("WARNING: comparing against untuned baselines; not admissible.\n")
 
+    import torch
+
+    torch.set_num_threads(args.torch_threads)
     reward_mode = RewardMode(args.reward_mode)
     storage: StorageSizing | None = DEFAULT_STORAGE if args.storage else None
-    config = EnvConfig(reward=RewardConfig(mode=reward_mode))
+    spec = AgentSpec.from_yaml(args.agent_config)
+    if args.n_steps is not None:
+        spec = replace(spec, hyperparams={**spec.hyperparams, "n_steps": args.n_steps})
+    # The observation layout follows from the policy: action mode 2 needs the
+    # per-asset blocks, every other policy the flat layout of M3.
+    obs_layout = (
+        ObservationLayoutMode.PER_ASSET
+        if spec.policy in CUSTOM_POLICIES
+        else ObservationLayoutMode.FLAT
+    )
+    config = EnvConfig(
+        reward=RewardConfig(mode=reward_mode),
+        observation=ObservationSpec(layout=obs_layout),
+    )
     timebase = TimeBase(config.sim_dt_min, config.control_dt_min)
     seeds = SeedSet.from_base(args.seed)
 
@@ -195,10 +223,6 @@ def main() -> None:
 
         return factory
 
-    spec = AgentSpec.from_yaml(args.agent_config)
-    if args.n_steps is not None:
-        spec = replace(spec, hyperparams={**spec.hyperparams, "n_steps": args.n_steps})
-
     manifest = RunManifest.create(
         config={
             # The full agent specification, not just the algorithm name: in M3
@@ -214,6 +238,8 @@ def main() -> None:
             "eval_set": args.eval_set,
             "reward_mode": reward_mode.value,
             "storage": asdict(storage) if storage is not None else None,
+            "obs_layout": obs_layout.value,
+            "torch_threads": args.torch_threads,
             # Part of the hashed configuration: the dual settings decide the
             # trajectory of a Lagrangian run as much as weights decide a
             # fixed-weight one.
@@ -237,7 +263,10 @@ def main() -> None:
     # manifest keeps only a hash of the configuration.
     (run_dir / "env.json").write_text(
         json.dumps(
-            {"storage": asdict(storage) if storage is not None else None},
+            {
+                "storage": asdict(storage) if storage is not None else None,
+                "obs_layout": obs_layout.value,
+            },
             indent=2,
             sort_keys=True,
         ),
