@@ -484,7 +484,7 @@ def test_pv_clipping_is_reported_not_silent() -> None:
     )
     state = asset.initial_state(np.random.default_rng(0))
     # Asks for full infeed although only a quarter is available.
-    setpoint = asset.to_setpoint(state, np.array([-0.02]), info)
+    setpoint = asset.to_setpoint(state, np.array([-0.02]), info, hold_min=15)
     assert setpoint.p_mw == pytest.approx(-0.005)
     assert setpoint.was_clipped
 
@@ -511,12 +511,13 @@ def test_pv_dynamics_is_a_pure_function() -> None:
         ambient_temp_degc=10.0,
         ghi_wm2=500.0,
     )
-    first = asset.dynamics(state, setpoint, exogenous, None)  # type: ignore[arg-type]
-    second = asset.dynamics(state, setpoint, exogenous, None)  # type: ignore[arg-type]
+    first = asset.dynamics(state, setpoint, exogenous, None, dt_min=5)  # type: ignore[arg-type]
+    second = asset.dynamics(state, setpoint, exogenous, None, dt_min=5)  # type: ignore[arg-type]
     assert first[0] == second[0]
     assert first[1] == second[1]
     assert state.last_p_mw == -0.01, "input state was mutated"
-    assert first[1].curtailed_energy_mwh == pytest.approx(0.007)
+    # An energy over the five-minute step, not a power: 7 kW for 5 minutes.
+    assert first[1].curtailed_energy_mwh == pytest.approx(0.007 * 5 / 60)
 
 
 # ---------------------------------------------------------------------------

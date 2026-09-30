@@ -12,6 +12,8 @@ from datetime import UTC, datetime
 import numpy as np
 import pytest
 
+from lvgrid_rl.components.bess import BatteryState, BatteryStorage
+from lvgrid_rl.components.pv import PvState, PvSystem
 from lvgrid_rl.core import information
 from lvgrid_rl.core.information import (
     ClairvoyanceError,
@@ -20,7 +22,13 @@ from lvgrid_rl.core.information import (
     assert_readable,
     unrestricted,
 )
-from lvgrid_rl.core.protocols import ActionSpec, NullSafetyComponent, Setpoint, Verdict
+from lvgrid_rl.core.protocols import (
+    ActionSpec,
+    AssetOutcome,
+    NullSafetyComponent,
+    Setpoint,
+    Verdict,
+)
 from lvgrid_rl.core.schemas import (
     AssetRatings,
     ExogenousInput,
@@ -86,6 +94,11 @@ SCHEMA_TYPES = [
     InformationSet,
     Setpoint,
     ActionSpec,
+    AssetOutcome,
+    PvState,
+    PvSystem,
+    BatteryState,
+    BatteryStorage,
 ]
 
 # Fields without a physical unit: indices, names, flags, nested schemas.
@@ -112,6 +125,10 @@ UNITLESS_FIELDS = {
     "clipping_info",
     "lo",
     "hi",
+    "bus",
+    "ratings",
+    "series_id",
+    "mode",
 }
 
 

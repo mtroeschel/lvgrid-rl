@@ -349,6 +349,7 @@ class LVGridEnv(gym.Env):
                     self._asset_states[asset.asset_id],
                     per_asset[asset.asset_id],
                     info_set,
+                    self.config.control_dt_min,
                 )
                 for asset in self.assets
             }
@@ -395,11 +396,15 @@ class LVGridEnv(gym.Env):
             exogenous = self._exogenous(self._t)
             # The decision is held for the whole control step, but the physics is
             # not: a PV system cannot feed in more than the current irradiance
-            # allows. Limiting here rather than in the controller keeps the
-            # decision/physics split clean.
+            # allows, a battery not more than its state of charge. Limiting here
+            # rather than in the controller keeps the decision/physics split
+            # clean.
             applied = {
-                asset.asset_id: asset.apply_availability(
-                    controlled[asset.asset_id], exogenous
+                asset.asset_id: asset.limit_to_physics(
+                    self._asset_states[asset.asset_id],
+                    controlled[asset.asset_id],
+                    exogenous,
+                    self.config.sim_dt_min,
                 )
                 for asset in self.assets
             }
@@ -429,9 +434,10 @@ class LVGridEnv(gym.Env):
                     applied[asset.asset_id],
                     exogenous,
                     grid,
+                    self.config.sim_dt_min,
                 )
                 self._asset_states[asset.asset_id] = new_state
-                curtailed_mwh += outcome.curtailed_energy_mwh * self.dt_hours
+                curtailed_mwh += outcome.curtailed_energy_mwh
 
             metrics = violation_metrics(grid, self.model.evaluated_bus_positions)
             if metrics.converged:
