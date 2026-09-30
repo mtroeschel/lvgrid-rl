@@ -49,10 +49,14 @@ class ActionMapper:
 
     asset_ids: tuple[str, ...]
     specs: tuple[ActionSpec, ...]
+    kinds: tuple[str, ...] | None = None
+    """Asset type per asset, same order; ``None`` for hand-built mappers."""
 
     def __post_init__(self) -> None:
         if len(self.asset_ids) != len(self.specs):
             raise ValueError("asset_ids and specs must have equal length")
+        if self.kinds is not None and len(self.kinds) != len(self.asset_ids):
+            raise ValueError("kinds must match asset_ids")
         if len(set(self.asset_ids)) != len(self.asset_ids):
             raise ValueError("asset_ids must be unique")
 
@@ -62,6 +66,41 @@ class ActionMapper:
         return cls(
             asset_ids=tuple(a.asset_id for a in assets),
             specs=tuple(a.action_spec() for a in assets),
+            kinds=tuple(a.kind for a in assets),
+        )
+
+    def component_mask(self, kind: str, name: str) -> np.ndarray:
+        """Boolean mask over the flat vector: components ``name`` of ``kind``.
+
+        What a rule-based controller acts on. A cap or droop rule for PV must
+        leave a battery alone, and it can only do that if it can tell the two
+        apart.
+        """
+        if self.kinds is None:
+            raise ValueError("this mapper carries no asset kinds")
+        return np.array(
+            [
+                k == kind and n == name
+                for k, spec in zip(self.kinds, self.specs, strict=True)
+                for n in spec.names
+            ],
+            dtype=bool,
+        )
+
+    @property
+    def neutral(self) -> np.ndarray:
+        """Physical "no intervention" value per component, concatenated."""
+        return np.array(
+            [
+                value
+                for spec in self.specs
+                for value in (
+                    spec.neutral
+                    if spec.neutral is not None
+                    else tuple(b.lo for b in spec.bounds)
+                )
+            ],
+            dtype=np.float64,
         )
 
     @property
@@ -133,10 +172,13 @@ class ActionMapper:
         return out
 
     def neutral_action(self) -> np.ndarray:
-        """Normalised action that curtails nothing.
+        """Normalised action that intervenes nowhere.
 
         For a PV system the upper bound is zero infeed, so ``+1`` would mean full
-        curtailment and ``-1`` full infeed. This helper avoids that sign trap in
-        baselines and tests.
+        curtailment and ``-1`` full infeed; for a battery ``-1`` is full
+        discharge and the neutral action is the middle. The values come from
+        each asset's :attr:`ActionSpec.neutral`, not from a bound: until M4 this
+        returned the lower bound for every component, which was right only for
+        PV active power.
         """
-        return self.to_normalised(self.lower)
+        return self.to_normalised(self.neutral)

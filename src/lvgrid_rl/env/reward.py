@@ -61,6 +61,10 @@ class RewardConfig:
     objective: Mapping[str, TermSpec] = field(
         default_factory=lambda: {
             "pv_curtailment": TermSpec(weight=-1.0),
+            # Per MWh through the battery terminals. The ratio to curtailment,
+            # 0.2, is the architecture's starting value (section 6.4), not a
+            # calibrated cost; zero throughput leaves the M3 reward unchanged.
+            "bess_degradation": TermSpec(weight=-0.2),
             "action_smoothness": TermSpec(weight=-0.05),
             "grid_losses": TermSpec(weight=-0.1),
         }
@@ -165,6 +169,7 @@ class RewardComposer:
         k100_worst_bus_this_step: int,
         k95_beyond_budget_worst_bus_this_step: int,
         windows_per_step: float,
+        storage_throughput_mwh: float,
     ) -> RewardBreakdown:
         """Evaluate the reward for one control step.
 
@@ -190,6 +195,8 @@ class RewardComposer:
                 these break the criterion; the fixed-weight K95 term prices them.
             windows_per_step: Assessment windows per control step on average,
                 ``control_dt / 10 min`` -- 1.5 at a 15-minute control step.
+            storage_throughput_mwh: Energy through the battery terminals,
+                charging and discharging, for the degradation term.
 
         **What the costs mean.** The voltage costs are *rates*: the violating
         windows at the worst bus of the step, divided by the windows a step
@@ -226,6 +233,7 @@ class RewardComposer:
         }
         objective = {
             "pv_curtailment": curtailed_energy_mwh,
+            "bess_degradation": storage_throughput_mwh,
             "action_smoothness": float(setpoint_change_mw),
             "grid_losses": metrics.losses_mw * dt_hours,
         }

@@ -24,14 +24,18 @@ beyond M3:
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import numpy as np
 
-from lvgrid_rl.components.pv import PvSystem
 from lvgrid_rl.core.information import DecisionScope, InformationSet
-from lvgrid_rl.core.protocols import NullSafetyComponent, SafetyComponent, Setpoint
+from lvgrid_rl.core.protocols import (
+    FlexAsset,
+    NullSafetyComponent,
+    SafetyComponent,
+    Setpoint,
+)
 from lvgrid_rl.core.schemas import (
     AssetState,
     ExogenousInput,
@@ -112,7 +116,7 @@ class LVGridEnv(gym.Env):
     def __init__(
         self,
         model: GridModel,
-        assets: Sequence[PvSystem],
+        assets: Sequence[FlexAsset],
         profiles: np.ndarray,
         series_ids: Sequence[str],
         timestamps: Sequence[Any],
@@ -145,14 +149,21 @@ class LVGridEnv(gym.Env):
 
         observation_spec = self.config.observation
         if not observation_spec.forecast_series:
-            observation_spec = ObservationSpec(
-                groups=observation_spec.groups,
-                sensor_config=observation_spec.sensor_config,
-                measured_buses=observation_spec.measured_buses,
+            # Forecasts exist for assets driven by a profile -- PV. A battery
+            # has none; its future is what the controller decides.
+            observation_spec = replace(
+                observation_spec,
                 forecast_horizon=self.config.forecast_horizon,
-                forecast_series=tuple(a.series_id for a in self.assets),
-                voltage_scale=observation_spec.voltage_scale,
-                power_scale_mw=observation_spec.power_scale_mw,
+                forecast_series=tuple(
+                    a.series_id for a in self.assets if hasattr(a, "series_id")
+                ),
+            )
+        if not observation_spec.storage_assets:
+            observation_spec = replace(
+                observation_spec,
+                storage_assets=tuple(
+                    (a.asset_id, a.capacity_mwh) for a in self.assets if a.kind == "bess"
+                ),
             )
         self.obs_builder = ObservationBuilder(observation_spec, model.n_evaluated_buses)
 
@@ -388,6 +399,20 @@ class LVGridEnv(gym.Env):
         outside_k100 = 0
         converged = True
         clipped = any(sp.was_clipped for sp in controlled.values())
+        # Limitations counted by asset kind and cause, per asset and control
+        # step: "bess/p_mw" for a request beyond the rating, "bess/p_mw_soc" for
+        # one the state of charge cannot sustain, "pv/p_mw" for more infeed than
+        # is available. A single flag cannot tell a policy that keeps charging a
+        # full battery from one that asks for too much power, and the same key
+        # means different things for different kinds.
+        clipping_counts: dict[str, int] = {}
+        for asset in self.assets:
+            for key in controlled[asset.asset_id].clipping_info:
+                label = f"{asset.kind}/{key}"
+                clipping_counts[label] = clipping_counts.get(label, 0) + 1
+        physics_limited: set[tuple[str, str]] = set()
+        throughput_mwh = 0.0
+        asset_loss_mwh = 0.0
         inner_steps = 0
 
         for _ in range(self.steps_per_control):
@@ -438,6 +463,12 @@ class LVGridEnv(gym.Env):
                 )
                 self._asset_states[asset.asset_id] = new_state
                 curtailed_mwh += outcome.curtailed_energy_mwh
+                if asset.kind == "bess":
+                    throughput_mwh += outcome.throughput_energy_mwh
+                asset_loss_mwh += outcome.loss_energy_mwh
+                for key in applied[asset.asset_id].clipping_info:
+                    if key not in controlled[asset.asset_id].clipping_info:
+                        physics_limited.add((asset.asset_id, f"{asset.kind}/{key}"))
 
             metrics = violation_metrics(grid, self.model.evaluated_bus_positions)
             if metrics.converged:
@@ -487,6 +518,7 @@ class LVGridEnv(gym.Env):
                 k95_before_step
             ),
             windows_per_step=self.config.control_dt_min / 10,
+            storage_throughput_mwh=throughput_mwh,
         )
         reward_total = step_reward.total
         breakdown_terms = dict(step_reward.terms)
@@ -530,7 +562,17 @@ class LVGridEnv(gym.Env):
             "k95_violations": totals["k95"],
             "k100_violations": totals["k100"],
             "curtailed_energy_mwh": totals["curtailed_energy_mwh"],
+            "storage_throughput_mwh": throughput_mwh,
+            "asset_loss_mwh": asset_loss_mwh,
         }
+        # A limitation applied by the physics inside the hold (the battery
+        # management cut-off) counts once per asset and control step, like one
+        # applied at the decision.
+        for _, key in physics_limited:
+            clipping_counts[key] = clipping_counts.get(key, 0) + 1
+        clipped = clipped or bool(physics_limited)
+        info["action_clipped"] = clipped
+        info.update({f"clipping/{key}": count for key, count in clipping_counts.items()})
         info.update({f"reward/{k}": v for k, v in breakdown_terms.items()})
         info.update({f"cost/{k}": v for k, v in breakdown_costs.items()})
         info["reward/total"] = reward_total

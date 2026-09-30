@@ -29,6 +29,7 @@ way the PV model has it (decision D4).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 import numpy as np
 
@@ -100,6 +101,7 @@ class BatteryStorage:
     eta_discharge_frac: float = 0.95
     standing_loss_mw: float = 0.0
     initial_soc_frac: Interval | None = None
+    kind: ClassVar[str] = "bess"
 
     def __post_init__(self) -> None:
         if not self.ratings.p_min_mw <= 0.0 <= self.ratings.p_max_mw:
@@ -171,7 +173,9 @@ class BatteryStorage:
         action space would make the normalisation non-affine. The state of
         charge enters in :meth:`to_setpoint`, where it is reported.
         """
-        return ActionSpec(names=("p_mw",), bounds=(self.ratings.p_bounds,))
+        return ActionSpec(
+            names=("p_mw",), bounds=(self.ratings.p_bounds,), neutral=(0.0,)
+        )
 
     def initial_state(self, rng: np.random.Generator) -> BatteryState:
         """Initial state, the state of charge drawn from ``initial_soc_frac``."""

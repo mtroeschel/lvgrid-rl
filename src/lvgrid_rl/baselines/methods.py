@@ -102,8 +102,11 @@ class FixedCap:
         """Nothing to reset."""
 
     def act(self, info: InformationSet) -> np.ndarray:
-        """Cap every component at ``cap`` times its rated power."""
-        physical = self.mapper.lower * self.cap
+        """Cap every PV system at ``cap`` times its rated power.
+
+        Every other asset stays at its neutral setpoint -- a battery idles.
+        """
+        physical = _pv_rule(self.mapper, self.mapper.lower * self.cap)
         return self.mapper.to_normalised(physical)
 
 
@@ -144,7 +147,10 @@ class PUDroop:
         local = vm[list(self.asset_bus_positions)]
         share = np.clip((local - self.v_start) / (self.v_max - self.v_start), 0.0, 1.0)
         # share = 0 means full infeed (lower bound), share = 1 means zero infeed.
-        physical = self.mapper.lower * (1.0 - share)
+        # One share per asset; spread onto the components, of which only the PV
+        # active power ones are used.
+        per_component = np.repeat(share, [spec.dim for spec in self.mapper.specs])
+        physical = _pv_rule(self.mapper, self.mapper.lower * (1.0 - per_component))
         return self.mapper.to_normalised(physical)
 
 
@@ -184,11 +190,15 @@ class QUDroop:
     def act(self, info: InformationSet) -> np.ndarray:
         """Absorb reactive power proportionally to the local voltage excess."""
         vm = np.asarray(info.measurements["vm_pu"])
-        physical = self.mapper.lower.copy()
+        physical = self.mapper.neutral.copy()
         cursor = 0
-        for position, spec in zip(
-            self.asset_bus_positions, self.mapper.specs, strict=True
+        kinds = self.mapper.kinds or ("pv",) * len(self.mapper.specs)
+        for position, spec, kind in zip(
+            self.asset_bus_positions, self.mapper.specs, kinds, strict=True
         ):
+            if kind != "pv":
+                cursor += spec.dim
+                continue
             share = float(
                 np.clip(
                     (vm[position] - self.v_start) / (self.v_max - self.v_start),
@@ -205,6 +215,19 @@ class QUDroop:
                     physical[cursor + offset] = share * bound.hi
             cursor += spec.dim
         return self.mapper.to_normalised(physical)
+
+
+def _pv_rule(mapper: ActionMapper, pv_values: np.ndarray) -> np.ndarray:
+    """Neutral everywhere, ``pv_values`` on the PV active power components.
+
+    The rules B2 to B4 are PV rules. Applied to a battery, "cap at 40 % of the
+    lower bound" would be a permanent discharge at 40 % of rated power. A mapper
+    without asset kinds is taken to hold PV only, as every mapper did in M3.
+    """
+    if mapper.kinds is None:
+        return pv_values
+    mask = mapper.component_mask("pv", "p_mw")
+    return np.where(mask, pv_values, mapper.neutral)
 
 
 BASELINES = {

@@ -476,6 +476,29 @@ raises rather than clamps when handed a setpoint that crosses a limit, because a
 clamp there would be exactly the silent limitation I4 forbids. Not modelled:
 voltage- or temperature-dependent efficiency, calendar ageing, reactive power.
 
+*Placement and sizing (M4, 4.2a).* One battery at the bus of every PV system,
+**1 kW and 2 kWh per kWp** of that system's rated power in the scenario-modified
+grid (`StorageSizing` in `env/factory.py`; under `moderate_growth` 8 batteries,
+702 kW, 1.40 MWh). Efficiencies 0.95 each way, operating range 5 to 95 %;
+training draws the initial state of charge from that range, evaluation weeks
+start at 50 % so that controllers and seeds share a starting point. The five
+storage units SimBench ships with this grid sit at buses without PV, follow
+published profiles and **stay part of the uncontrolled load**, so the
+uncontrolled grid is the one M3 measured. With every battery idle the power flow
+equals the PV-only one up to floating-point rounding (around 1e-13 relative; the
+added zero-injection elements change pandapower's summation order), and the
+integer K95 counts agree exactly — which keeps the tuned baseline parameters
+and the M3 reference values valid.
+
+*Neutral actions and rule-based controllers.* Every `ActionSpec` states the
+physical value that means "no intervention": full infeed for PV active power,
+zero for reactive power, zero for a battery. Up to M4 the neutral action was the
+lower bound of every component — right for PV active power, a full discharge for
+a battery and full reactive injection for PV in `pq` mode. The rule-based
+references B2–B4 act only on PV active power and leave every other asset
+neutral; applied to a battery, "cap at 40 % of the lower bound" would be a
+permanent discharge.
+
 **Heat pump.** Not a load profile but a **shiftable load with state**: heat demand
 from data, COP(T_ambient, T_flow) from when2heat characteristics, and a store.
 Stage 1 (fixed for M4) is a buffer store as an energy reservoir with losses and an
@@ -611,7 +634,7 @@ reward:
     pv_curtailment:    {weight: -1.0,  unit: kWh}
     ev_unserved:       {weight: -5.0,  unit: kWh, at: departure}
     hp_comfort:        {weight: -2.0,  unit: Kh}
-    bess_degradation:  {weight: -0.2,  unit: kWh_throughput}
+    bess_degradation:  {weight: -0.2,  unit: MWh_throughput}  # starting value, not a calibrated cost
     action_smoothness: {weight: -0.05}
     grid_losses:       {weight: -0.1,  unit: kWh}
   constraint:
@@ -1359,8 +1382,10 @@ the main argument for M4.
 *M4 is cut into steps, one pull request each.* 4.0 settled the reward mode on
 the M3 setup (fixed weights, `docs/results/m4-lagrangian.md`); the three defects
 it uncovered in M3 were corrected separately. 4.1 is the battery model with the
-sharpened asset protocol and invariant I2. Then: 4.2 action mode 2 and the
-battery in the environment, with the degradation term in the reward; 4.3 the
+sharpened asset protocol and invariant I2. 4.2 is split in two: 4.2a places the
+batteries in the environment (observation, degradation term, KPIs, rule-based
+controllers that leave them idle), 4.2b is action mode 2, whose encoder is a
+design decision of its own. Then: 4.3 the
 heat pump with buffer store; 4.4 EV sessions from emobpy, calibrated against
 ElaadNL; 4.5 reference behaviour for the new assets and a survey of whether heat
 pump and EV load make the lower voltage limit bind; 4.6 the acceptance runs,
