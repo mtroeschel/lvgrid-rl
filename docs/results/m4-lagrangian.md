@@ -1,6 +1,6 @@
 # M4.0: validating the Lagrangian reward mode on the M3 setup
 
-**Status: decided on four of five seeds; seed 5 still running.** The criteria
+**Status: complete, five of five seeds.** The criteria
 and the decision rule below were written and committed (`86c32f9`) before the
 first run finished, so that the decision on the reward mode for M4 does not
 adapt to what the runs happen to show.
@@ -8,8 +8,9 @@ adapt to what the runs happen to show.
 **Verdict: V1 and V2 hold, V3 fails. M4 stays on fixed weights.** The mechanism
 works -- multipliers converge, reach the workers and hold the constraints -- but
 it does not reach a better operating point than the hand-set weight: two of four
-policies are dominated by a measured cap, against at most one of five allowed.
-Seed 5 cannot change that outcome.
+policies are dominated by a measured cap -- three of five in the end -- against
+at most one of five allowed. The outcome was fixed after four seeds; the fifth
+confirmed it.
 
 ## Question
 
@@ -104,8 +105,7 @@ satisfied by tuning until it passes.
 
 ## Results
 
-Test weeks, `EpisodeMode.EVALUATE`. Seed 5 is still training; its row and the
-IQM over five seeds follow when it finishes.
+Test weeks, `EpisodeMode.EVALUATE`.
 
 | seed | run | final λ thermal | λ change, last 20 % | pass rate | overload | curtailed | dominated by |
 |---|---|---|---|---|---|---|---|
@@ -113,6 +113,14 @@ IQM over five seeds follow when it finishes.
 | 2 | `706bacbf9f20` | 33.61 | +3.3 % | 1.0 | 0.079 | 36.98 MWh | -- |
 | 3 | `092a9bddbcec` | 43.65 | +4.3 % | 1.0 | 0.000 | 40.56 MWh | -- |
 | 4 | `5d1b1b73241d` | 40.00 | +2.7 % | 1.0 | 0.000 | 46.61 MWh | caps 0.10, 0.11 |
+| 5 | `c52cce77df58` | 43.17 | +4.3 % | 1.0 | 0.237 | 41.58 MWh | cap 0.12 |
+
+Over five seeds (IQM, 95 % bootstrap CI, `scripts/aggregate.py`):
+
+| | pass rate | k95 windows | overload | curtailed |
+|---|---|---|---|---|
+| **Lagrangian** | 1.0000 [1.0, 1.0] | 0 [0, 0] | 0.026 [0.00, 0.18] | 42.35 MWh [38.17, 46.04] |
+| fixed weights (M3) | 1.0000 [1.0, 1.0] | 0 [0, 0] | 0.101 [0.00, 1.42] | 39.89 MWh [35.02, 45.01] |
 
 The K95 multiplier stayed at zero in every run, and the K100 multiplier below
 0.05 -- as expected in a scenario where voltage does not bind.
@@ -124,13 +132,19 @@ about 0.0005 per step, so `J_c − d` stays positive. "Converged" here means the
 growth has slowed, not stopped; with a longer budget the multiplier would keep
 climbing.
 
-**V2 holds.** Pass rate 1.0 and overload between 0 and 0.08 in every seed.
+**V2 holds.** Pass rate 1.0 in every seed; overload IQM 0.026, at most 0.24.
 
-**V3 fails.** Seeds 1 and 4 curtail more than a cap for the same zero overload.
-In M3, one of five policies was dominated.
+**V3 fails.** The curtailment half holds (IQM 42.35 ≤ 45.0), the dominance half
+does not: seeds 1 and 4 curtail more than a cap for the same zero overload, and
+seed 5 is beaten by `cap 0.12` on both axes. In M3, one of five policies was
+dominated.
 
 ### Reading
 
+- **The overall picture is a small shift along the frontier, not a better
+  frontier.** The Lagrangian policies hold overload slightly lower (IQM 0.026
+  against 0.101) and curtail slightly more (42.35 against 39.89 MWh). Both
+  intervals overlap widely with M3.
 - **The dual prices ended three to four times above the M3 weight** of 10. The
   constraint was already held at that weight, so the Lagrangian runs paid a
   higher price for the same corner, which is consistent with the dominated
@@ -148,3 +162,20 @@ In M3, one of five policies was dominated.
   A small positive thermal limit, or a cost measured on the deterministic
   policy, would address that. Either one is a different experiment with its own
   pre-registration, not a correction round under this rule.
+
+## Consequence for M4
+
+M4 trains with `fixed_weights`, as section 13 D5 now records. The Lagrangian
+mode stays in the code, tested and working, as the comparison arm for M7. The
+open question it leaves is the zero limit: before the mode is reconsidered, a
+positive thermal limit or a cost measured on the deterministic policy needs its
+own pre-registered test.
+
+## Artefacts
+
+| | |
+|---|---|
+| runs | `results/m4-lagrangian/<run_id>/` with `manifest.json`, `lagrangian.json`, `eval/test.json` |
+| aggregation | `results/aggregate-m4-lagrangian/aggregate_test.json` |
+| cap points | `results/pareto/pareto_test.json` (from M3, unchanged) |
+| baseline rows | merged from `results/m3/4c717e8655ad/eval/test.json` |

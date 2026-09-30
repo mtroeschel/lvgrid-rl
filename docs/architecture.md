@@ -597,7 +597,8 @@ only a voltage term would optimise against a criterion that barely binds.
 
 **Mode `fixed_weights`** (starting configuration): all terms are scalarised.
 
-**Mode `lagrangian`** (implemented at the start of M4, under validation — see
+**Mode `lagrangian`** (implemented at the start of M4 and validated on the M3
+setup, where it held the constraints but did not improve on fixed weights — see
 `docs/results/m4-lagrangian.md`): only `objective` terms form the reward; each
 `constraint` term is reported as a cost signal in `info["cost/<name>"]` and
 priced by a multiplier, `r = r_obj − Σ λ_i·c_i`, inside the `RewardComposer`. A
@@ -1402,7 +1403,7 @@ finished shield, and M9 is additive.
 | D2 | voltage criterion | **EN 50160 percentile criterion** (K95 on ten-minute means per week, K100 with −15 %) | §6.6 |
 | D3 | heat pump model | **stage 1: buffer store** for M4; `ThermalModel` protocol admits 1R1C later | §5 |
 | D4 | reactive power | Q implemented as an action option, main study P-dominated; Q required for B3 regardless | §5 |
-| D5 | reward weighting | **fixed weights first**, constrained RL with Lagrange multipliers as a full alternative. Being validated on the M3 setup before M4 (`docs/results/m4-lagrangian.md`); the result decides the mode for M4 | §6.4 |
+| D5 | reward weighting | **fixed weights for M4.** The Lagrangian mode was validated on the M3 setup: it holds the constraints but reaches no better operating point (three of five policies dominated by a cap), so it stays the comparison arm for M7 (`docs/results/m4-lagrangian.md`) | §6.4 |
 | D6 | forecasts | **error model with `perfect` as a special case** | §6.7 |
 | D7 | connection points | buses with a load **or** generator/storage element; exclusion list for equivalent infeeds; "all buses" as a sensitivity variant | §4.2 |
 | D8 | safety layer | not a switch but **three orthogonal axes** (feasibility model × mechanism × learning coupling) plus its own KPIs | §7.1 |
