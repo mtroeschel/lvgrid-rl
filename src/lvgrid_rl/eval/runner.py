@@ -12,7 +12,8 @@ failure on the one extreme week or a little failure everywhere (§6.5).
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass, field
 from typing import Protocol
 
 import numpy as np
@@ -49,6 +50,12 @@ class EpisodeResult:
     diverged_steps: int
     clipped_steps: int
     decision_time_ms: float
+    storage_throughput_mwh: float = 0.0
+    """Energy through the battery terminals, the basis of degradation."""
+    asset_loss_mwh: float = 0.0
+    """Conversion and standing losses inside the assets."""
+    clipping_counts: Mapping[str, int] = field(default_factory=dict)
+    """Limitations by cause, counted per asset and control step."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +105,15 @@ class RunResult:
             "k100_windows": self.total("k100_violating_windows"),
             "overload_cost": self.total("overload_cost"),
             "diverged_steps": self.total("diverged_steps"),
+            "clipped_steps": self.total("clipped_steps"),
+            "storage_throughput_mwh": self.total("storage_throughput_mwh"),
+            "asset_loss_mwh": self.total("asset_loss_mwh"),
+            **{
+                f"clipping/{key}": float(
+                    sum(e.clipping_counts.get(key, 0) for e in self.episodes)
+                )
+                for key in sorted({k for e in self.episodes for k in e.clipping_counts})
+            },
             "decision_time_ms": self.mean("decision_time_ms"),
         }
 
@@ -160,6 +176,9 @@ def run_controller(
         overload = 0.0
         diverged = 0
         clipped = 0
+        throughput = 0.0
+        asset_loss = 0.0
+        clipping: dict[str, int] = {}
         decision_ns = 0
         steps = 0
         week = info["week"]
@@ -179,6 +198,12 @@ def run_controller(
             overload += step_info.get("cost/thermal_overload", 0.0)
             diverged += int(step_info["pf_diverged"])
             clipped += int(step_info["action_clipped"])
+            throughput += step_info.get("storage_throughput_mwh", 0.0)
+            asset_loss += step_info.get("asset_loss_mwh", 0.0)
+            for key, value in step_info.items():
+                if key.startswith("clipping/"):
+                    cause = key.removeprefix("clipping/")
+                    clipping[cause] = clipping.get(cause, 0) + int(value)
             steps += 1
             if terminated or truncated:
                 break
@@ -207,6 +232,9 @@ def run_controller(
                 diverged_steps=diverged,
                 clipped_steps=clipped,
                 decision_time_ms=decision_ns / 1e6 / max(steps, 1),
+                storage_throughput_mwh=throughput,
+                asset_loss_mwh=asset_loss,
+                clipping_counts=clipping,
             )
         )
 

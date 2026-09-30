@@ -185,9 +185,11 @@ def test_terms_are_reported_individually() -> None:
         k100_worst_bus_this_step=0,
         windows_per_step=1.5,
         k95_beyond_budget_worst_bus_this_step=0,
+        storage_throughput_mwh=0.0,
     )
     assert set(result.terms) == {
         "pv_curtailment",
+        "bess_degradation",
         "action_smoothness",
         "grid_losses",
         "en50160_k95",
@@ -217,6 +219,7 @@ def test_costs_are_reported_unweighted() -> None:
         k100_worst_bus_this_step=0,
         windows_per_step=1.5,
         k95_beyond_budget_worst_bus_this_step=0,
+        storage_throughput_mwh=0.0,
     )
     # One violating window at each of 13 buses is one at the worst bus: a rate
     # of 1 / 1.5 for this step, not a thirteenth of anything.
@@ -238,6 +241,7 @@ def test_lagrangian_mode_ignores_constraints_until_multipliers_are_set() -> None
         k100_worst_bus_this_step=0,
         windows_per_step=1.5,
         k95_beyond_budget_worst_bus_this_step=0,
+        storage_throughput_mwh=0.0,
     )
     before = composer.compute(**kwargs)
     assert before.terms["en50160_k95"] == 0.0
@@ -274,6 +278,7 @@ def _step_costs(composer: RewardComposer, worst_k95: int, total_k95: int) -> dic
         k100_worst_bus_this_step=0,
         windows_per_step=1.5,
         k95_beyond_budget_worst_bus_this_step=0,
+        storage_throughput_mwh=0.0,
     ).costs
 
 
@@ -317,6 +322,7 @@ def _fixed_weight_terms(beyond_budget: int, total_k95: int = 26) -> dict:
         k100_worst_bus_this_step=1,
         windows_per_step=1.5,
         k95_beyond_budget_worst_bus_this_step=beyond_budget,
+        storage_throughput_mwh=0.0,
     ).terms
 
 
@@ -355,6 +361,7 @@ def test_fixed_weight_thermal_term_keeps_the_m3_trade_off() -> None:
         k100_worst_bus_this_step=0,
         windows_per_step=1.5,
         k95_beyond_budget_worst_bus_this_step=0,
+        storage_throughput_mwh=0.0,
     )
     assert corrected.terms["thermal_overload"] == pytest.approx(m3_term)
     assert corrected.costs["thermal_overload"] == pytest.approx(
@@ -384,6 +391,7 @@ def test_lagrangian_terms_are_multiplier_times_cost() -> None:
         k100_worst_bus_this_step=0,
         windows_per_step=1.5,
         k95_beyond_budget_worst_bus_this_step=0,
+        storage_throughput_mwh=0.0,
     )
     assert result.terms["en50160_k95"] == pytest.approx(-2.0 / 1.5)
     assert result.terms["thermal_overload"] == pytest.approx(-7.0 * 0.4 * 0.25)
@@ -412,6 +420,7 @@ def test_divergence_is_penalised_not_raised() -> None:
         k100_worst_bus_this_step=0,
         windows_per_step=1.5,
         k95_beyond_budget_worst_bus_this_step=0,
+        storage_throughput_mwh=0.0,
     )
     assert result.total == RewardConfig().divergence_penalty
 

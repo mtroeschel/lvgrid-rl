@@ -112,6 +112,7 @@ UNITLESS_FIELDS = {
     "series_ids",
     "names",
     "bounds",
+    "neutral",  # in the unit of its component, like bounds
     "discrete_levels",
     "grid",
     "assets",

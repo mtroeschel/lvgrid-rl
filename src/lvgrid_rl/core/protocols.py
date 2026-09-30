@@ -70,15 +70,27 @@ class ActionSpec:
         discrete_levels: For discretised variants, the number of levels per
             component; otherwise ``None``. Needed for the masking arm of the
             safe-RL comparison (section 6.8).
+        neutral: The physical value per component that means "no
+            intervention": full infeed for PV active power, zero for reactive
+            power, zero for a battery. ``None`` falls back to the lower bound,
+            which is right for PV active power and wrong for everything else --
+            the reason every asset model states it explicitly.
     """
 
     names: tuple[str, ...]
     bounds: tuple[Interval, ...]
     discrete_levels: tuple[int, ...] | None = None
+    neutral: tuple[float, ...] | None = None
 
     def __post_init__(self) -> None:
         if len(self.names) != len(self.bounds):
             raise ValueError("names and bounds must have equal length")
+        if self.neutral is not None:
+            if len(self.neutral) != len(self.names):
+                raise ValueError("neutral must match names")
+            for value, bound in zip(self.neutral, self.bounds, strict=True):
+                if not bound.contains(value):
+                    raise ValueError(f"neutral value {value} outside {bound}")
         if self.discrete_levels is not None and len(self.discrete_levels) != len(
             self.names
         ):
@@ -170,6 +182,9 @@ class FlexAsset(Protocol):
     asset_id: str
     bus: int
     ratings: AssetRatings
+    kind: str
+    """Asset type, e.g. ``"pv"`` or ``"bess"``. Action mode 2 shares parameters
+    per kind, and rule-based controllers act on the kinds they are meant for."""
 
     def action_spec(self) -> ActionSpec:
         """Action space in physical units."""

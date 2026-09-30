@@ -27,7 +27,7 @@ from lvgrid_rl.agents.policy_controller import PolicyController
 from lvgrid_rl.baselines.methods import DoNothing, FixedCap, PUDroop, asset_bus_positions
 from lvgrid_rl.data.timebase import TimeBase
 from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
-from lvgrid_rl.env.factory import make_env
+from lvgrid_rl.env.factory import DEFAULT_STORAGE, StorageSizing, make_env
 from lvgrid_rl.env.lv_grid_env import EnvConfig
 from lvgrid_rl.env.reward import RewardConfig, RewardMode
 from lvgrid_rl.eval.kpi_schema import KPI_SCHEMA
@@ -95,6 +95,13 @@ def build_parser() -> argparse.ArgumentParser:
         "The report recomputes every baseline, which is deterministic and "
         "identical across runs, and costs over an hour per run; the acceptance "
         "figure comes from scripts/evaluate.py on the test weeks either way.",
+    )
+    parser.add_argument(
+        "--storage",
+        action="store_true",
+        help="add a controllable battery at every PV bus, 1 kW and 2 kWh per "
+        "kWp (the M4 configuration); without it the actuators are PV only, as "
+        "in M3",
     )
     parser.add_argument(
         "--reward-mode",
@@ -165,6 +172,7 @@ def main() -> None:
         print("WARNING: comparing against untuned baselines; not admissible.\n")
 
     reward_mode = RewardMode(args.reward_mode)
+    storage: StorageSizing | None = DEFAULT_STORAGE if args.storage else None
     config = EnvConfig(reward=RewardConfig(mode=reward_mode))
     timebase = TimeBase(config.sim_dt_min, config.control_dt_min)
     seeds = SeedSet.from_base(args.seed)
@@ -182,6 +190,7 @@ def main() -> None:
                 config=config,
                 episode_spec=train_spec,
                 seed=int(seeds.worker_generator("train", index).integers(2**31)),
+                storage=storage,
             )
 
         return factory
@@ -204,6 +213,7 @@ def main() -> None:
             "control_dt_min": config.control_dt_min,
             "eval_set": args.eval_set,
             "reward_mode": reward_mode.value,
+            "storage": asdict(storage) if storage is not None else None,
             # Part of the hashed configuration: the dual settings decide the
             # trajectory of a Lagrangian run as much as weights decide a
             # fixed-weight one.
@@ -223,6 +233,16 @@ def main() -> None:
     )
     run_dir = args.run_dir / manifest.run_id
     manifest.write(run_dir)
+    # What scripts/evaluate.py needs to rebuild the same environment. The
+    # manifest keeps only a hash of the configuration.
+    (run_dir / "env.json").write_text(
+        json.dumps(
+            {"storage": asdict(storage) if storage is not None else None},
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
 
     vec_cls = SubprocVecEnv if args.workers > 1 else DummyVecEnv
     # VecMonitor is not optional: without it Stable-Baselines3 logs no episode
@@ -277,7 +297,12 @@ def main() -> None:
     # meaningless.
     eval_spec = EpisodeSpec(mode=EpisodeMode.EVALUATE, randomise_budget=False)
     positions = asset_bus_positions(
-        make_env(code=args.code, scenario=args.scenario, set_name=args.eval_set)
+        make_env(
+            code=args.code,
+            scenario=args.scenario,
+            set_name=args.eval_set,
+            storage=storage,
+        )
     )
 
     cap = tuned["fixed_cap"]["params"]["cap"]
@@ -301,6 +326,7 @@ def main() -> None:
             config=config,
             episode_spec=eval_spec,
             seed=seeds.eval,
+            storage=storage,
         )
         # n_episodes defaults to one per week in the set, which is the
         # standard-conforming choice.

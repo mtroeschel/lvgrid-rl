@@ -29,7 +29,7 @@ from lvgrid_rl.baselines.methods import (
     asset_bus_positions,
 )
 from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
-from lvgrid_rl.env.factory import make_env
+from lvgrid_rl.env.factory import StorageSizing, make_env
 from lvgrid_rl.env.lv_grid_env import EnvConfig
 from lvgrid_rl.eval.kpi_schema import KPI_SCHEMA, check_kpi_schema
 from lvgrid_rl.eval.runner import run_controller
@@ -101,6 +101,16 @@ def main() -> None:
     # Complete weeks, fixed order, zero budget: the standard-conforming setting.
     spec = EpisodeSpec(mode=EpisodeMode.EVALUATE, randomise_budget=False)
 
+    # The environment the policy was trained in. Runs from before M4 have no
+    # env.json and are PV only.
+    env_file = args.run_dir / "env.json"
+    stored = (
+        json.loads(env_file.read_text(encoding="utf-8")).get("storage")
+        if env_file.exists()
+        else None
+    )
+    storage = StorageSizing(**stored) if stored is not None else None
+
     def build():
         return make_env(
             code=args.code,
@@ -109,6 +119,7 @@ def main() -> None:
             config=EnvConfig(),
             episode_spec=spec,
             seed=args.seed,
+            storage=storage,
         )
 
     positions = asset_bus_positions(build())
@@ -141,6 +152,13 @@ def main() -> None:
                 f"{args.baselines_from} holds results for set "
                 f"{earlier.get('set')!r}, not {args.set_name!r}"
             )
+        if earlier.get("storage") != stored:
+            raise ValueError(
+                f"{args.baselines_from} was evaluated with storage "
+                f"{earlier.get('storage')!r}, this run with {stored!r}. Idle "
+                "batteries leave the grid equal only up to rounding; recompute "
+                "the baselines for this configuration once and merge from there."
+            )
         rows.extend(r for r in earlier["results"] if r["controller"] != "policy")
 
     header = (
@@ -165,6 +183,7 @@ def main() -> None:
             {
                 "set": args.set_name,
                 "kpi_schema": KPI_SCHEMA,
+                "storage": stored,
                 "episode_mode": "evaluate",
                 "baseline_params": tuned,
                 "results": rows,

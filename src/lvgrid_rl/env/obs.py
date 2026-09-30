@@ -45,6 +45,7 @@ class FeatureGroup(StrEnum):
     TIME = "time"
     MEASUREMENTS = "measurements"
     LOCAL_POWER = "local_power"
+    ASSET_STATE = "asset_state"
     PQ_BUDGET = "pq_budget"
     FORECAST = "forecast"
 
@@ -65,12 +66,16 @@ class ObservationSpec:
             empirically: it makes the normalised value read directly as "share of
             the permitted band".
         power_scale_mw: Scale for power features.
+        storage_assets: ``(asset_id, capacity_mwh)`` per battery, whose state
+            of charge forms the ``asset_state`` group. Empty without batteries,
+            which leaves the M3 observation unchanged.
     """
 
     groups: tuple[FeatureGroup, ...] = (
         FeatureGroup.TIME,
         FeatureGroup.MEASUREMENTS,
         FeatureGroup.LOCAL_POWER,
+        FeatureGroup.ASSET_STATE,
         FeatureGroup.PQ_BUDGET,
         FeatureGroup.FORECAST,
     )
@@ -80,6 +85,7 @@ class ObservationSpec:
     forecast_series: tuple[str, ...] = ()
     voltage_scale: float = 0.10
     power_scale_mw: float = 0.1
+    storage_assets: tuple[tuple[str, float], ...] = ()
 
     def __post_init__(self) -> None:
         if self.forecast_horizon < 1:
@@ -137,6 +143,10 @@ class ObservationBuilder:
             ]
         if group is FeatureGroup.LOCAL_POWER:
             return ["local/p_slack_mw", "local/losses_mw"]
+        if group is FeatureGroup.ASSET_STATE:
+            return [
+                f"asset/{asset_id}/soc_frac" for asset_id, _ in self.spec.storage_assets
+            ]
         if group is FeatureGroup.PQ_BUDGET:
             return [
                 "pq/budget_used_max",
@@ -222,6 +232,18 @@ class ObservationBuilder:
                     info.measurements["p_slack_mw"] / self.spec.power_scale_mw,
                     info.measurements["losses_mw"] / self.spec.power_scale_mw,
                 ]
+            )
+
+        if group is FeatureGroup.ASSET_STATE:
+            # Without the state of charge a battery policy is not Markovian: the
+            # same grid state asks for charging or discharging depending on how
+            # full the battery already is. A fraction needs no further scale.
+            return np.array(
+                [
+                    state.assets[asset_id].energy_mwh / capacity_mwh
+                    for asset_id, capacity_mwh in self.spec.storage_assets
+                ],
+                dtype=np.float64,
             )
 
         if group is FeatureGroup.PQ_BUDGET:

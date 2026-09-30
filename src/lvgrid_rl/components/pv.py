@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import ClassVar
 
 import numpy as np
 
@@ -71,6 +72,7 @@ class PvSystem:
     ratings: AssetRatings
     series_id: str
     mode: PvMode = PvMode.P_ONLY
+    kind: ClassVar[str] = "pv"
 
     def action_spec(self) -> ActionSpec:
         """Action space in physical units (invariant I4).
@@ -83,14 +85,22 @@ class PvSystem:
         """
         names: list[str] = []
         bounds: list[Interval] = []
+        neutral: list[float] = []
         if self.mode in (PvMode.P_ONLY, PvMode.PQ):
             names.append("p_mw")
             bounds.append(Interval(self.ratings.p_min_mw, self.ratings.p_max_mw))
+            neutral.append(self.ratings.p_min_mw)  # full infeed
         if self.mode in (PvMode.Q_ONLY, PvMode.PQ):
             q_max = self.ratings.s_max_mva or abs(self.ratings.p_min_mw)
             names.append("q_mvar")
             bounds.append(Interval(-q_max, q_max))
-        return ActionSpec(names=tuple(names), bounds=tuple(bounds))
+            # No reactive power. Up to M4 the neutral action was the lower bound
+            # for every component, which for q meant injecting the full reactive
+            # capability.
+            neutral.append(0.0)
+        return ActionSpec(
+            names=tuple(names), bounds=tuple(bounds), neutral=tuple(neutral)
+        )
 
     def initial_state(self, rng: np.random.Generator) -> PvState:
         """Initial state. Deterministic; the generator is unused here."""
