@@ -55,6 +55,9 @@ rl = [
   "lvgrid-rl[env]",
   "stable-baselines3>=2.3",
   "sb3-contrib>=2.3",
+  # configs/agent/*.yaml is read by the training script. Present before only
+  # as a transitive dependency of pre-commit, which is not part of this extra.
+  "pyyaml>=6.0",
   "torch>=2.2",
   # Stable-Baselines3 raises rather than degrading when a tensorboard_log
   # directory is configured without tensorboard installed, so it belongs in the

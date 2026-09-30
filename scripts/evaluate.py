@@ -31,6 +31,7 @@ from lvgrid_rl.baselines.methods import (
 from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
 from lvgrid_rl.env.factory import make_env
 from lvgrid_rl.env.lv_grid_env import EnvConfig
+from lvgrid_rl.eval.kpi_schema import KPI_SCHEMA, check_kpi_schema
 from lvgrid_rl.eval.runner import run_controller
 
 
@@ -134,6 +135,7 @@ def main() -> None:
 
     if args.baselines_from is not None:
         earlier = json.loads(args.baselines_from.read_text(encoding="utf-8"))
+        check_kpi_schema(earlier, args.baselines_from)
         if earlier.get("set") != args.set_name:
             raise ValueError(
                 f"{args.baselines_from} holds results for set "
@@ -162,6 +164,7 @@ def main() -> None:
         json.dumps(
             {
                 "set": args.set_name,
+                "kpi_schema": KPI_SCHEMA,
                 "episode_mode": "evaluate",
                 "baseline_params": tuned,
                 "results": rows,

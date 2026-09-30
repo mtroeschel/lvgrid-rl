@@ -34,6 +34,7 @@ from lvgrid_rl.baselines.methods import DoNothing, FixedCap, PUDroop, asset_bus_
 from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
 from lvgrid_rl.env.factory import make_env
 from lvgrid_rl.env.lv_grid_env import EnvConfig
+from lvgrid_rl.eval.kpi_schema import KPI_SCHEMA, check_kpi_schema
 from lvgrid_rl.eval.runner import run_controller
 
 DEFAULT_CAPS = (0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.60)
@@ -85,6 +86,7 @@ def load_policy_points(paths: list[Path], set_name: str) -> list[Point]:
     points: list[Point] = []
     for path in paths:
         payload = json.loads(path.read_text(encoding="utf-8"))
+        check_kpi_schema(payload, path)
         if payload.get("set") != set_name:
             raise ValueError(
                 f"{path} holds results for set {payload.get('set')!r}, not {set_name!r}"
@@ -226,6 +228,7 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     payload = {
         "set": args.set_name,
+        "kpi_schema": KPI_SCHEMA,
         "weeks": n_weeks,
         "scenario": args.scenario,
         "points": [

@@ -1108,6 +1108,7 @@ env = [
 ]
 rl = [
     { name = "gymnasium" },
+    { name = "pyyaml" },
     { name = "sb3-contrib" },
     { name = "stable-baselines3" },
     { name = "tensorboard" },
@@ -1143,6 +1144,7 @@ requires-dist = [
     { name = "pandapower", marker = "extra == 'sim'", specifier = ">=2.14" },
     { name = "pandas", marker = "extra == 'sim'", specifier = ">=2.1" },
     { name = "pyarrow", marker = "extra == 'sim'", specifier = ">=15" },
+    { name = "pyyaml", marker = "extra == 'rl'", specifier = ">=6.0" },
     { name = "sb3-contrib", marker = "extra == 'rl'", specifier = ">=2.3" },
     { name = "simbench", marker = "extra == 'sim'", specifier = ">=1.6.2" },
     { name = "stable-baselines3", marker = "extra == 'rl'", specifier = ">=2.3" },

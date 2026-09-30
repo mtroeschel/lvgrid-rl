@@ -1,19 +1,27 @@
-# Starting configuration for M3. Deliberately close to the Stable-Baselines3
-# defaults: tuning belongs in M7 with Optuna, and a hand-tuned starting point
-# would make the later sweep look better than it is.
+# PPO as every run from M3 onwards was actually trained: the Stable-Baselines3
+# defaults, written out. Tuning belongs in M7 with Optuna, and a hand-tuned
+# starting point would make the later sweep look better than it is.
+#
+# Until the M3 corrections this file listed n_steps 512, batch_size 128 and a
+# 256x256 network, but train.py never read it, so the runs used the library
+# defaults below (docs/results/m3.md, correction note). The file now states what
+# was used, and train.py reads it; changing a value here is a new experiment.
 #
 # gamma is absent on purpose. It is derived from control_dt_min, because the
 # EN 50160 criterion spans a week and the effective horizon has to cover it
-# (architecture section 6.5). Putting it here would be rejected by AgentSpec.
+# (architecture section 6.5). Putting it under hyperparams is rejected by
+# AgentSpec.
 algo: ppo
 policy: MlpPolicy
 hyperparams:
-  n_steps: 512          # per worker; a rollout shorter than an episode is fine
-  batch_size: 128
+  n_steps: 2048         # per worker; 16,384 per rollout with eight workers
+  batch_size: 64
   learning_rate: 3.0e-4
   n_epochs: 10
   gae_lambda: 0.95
   clip_range: 0.2
   ent_coef: 0.0
 policy_kwargs:
-  net_arch: [256, 256]
+  net_arch:
+    pi: [64, 64]
+    vf: [64, 64]

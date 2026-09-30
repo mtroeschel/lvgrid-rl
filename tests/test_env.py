@@ -172,7 +172,7 @@ def test_terms_are_reported_individually() -> None:
     Without the decomposition it is impossible to reconstruct which term
     dominated learning.
     """
-    composer = RewardComposer(RewardConfig(), budget_windows=50)
+    composer = RewardComposer(RewardConfig())
     result = composer.compute(
         metrics=_metrics(overload_excess_percent=20.0),
         curtailed_energy_mwh=0.5,
@@ -184,6 +184,7 @@ def test_terms_are_reported_individually() -> None:
         k95_worst_bus_this_step=0,
         k100_worst_bus_this_step=0,
         windows_per_step=1.5,
+        k95_beyond_budget_worst_bus_this_step=0,
     )
     assert set(result.terms) == {
         "pv_curtailment",
@@ -203,7 +204,7 @@ def test_costs_are_reported_unweighted() -> None:
     The Lagrangian callback and the KPI engine consume the physical values, not
     the weighted ones.
     """
-    composer = RewardComposer(RewardConfig(), budget_windows=50)
+    composer = RewardComposer(RewardConfig())
     result = composer.compute(
         metrics=_metrics(),
         curtailed_energy_mwh=0.0,
@@ -215,6 +216,7 @@ def test_costs_are_reported_unweighted() -> None:
         k95_worst_bus_this_step=1,
         k100_worst_bus_this_step=0,
         windows_per_step=1.5,
+        k95_beyond_budget_worst_bus_this_step=0,
     )
     # One violating window at each of 13 buses is one at the worst bus: a rate
     # of 1 / 1.5 for this step, not a thirteenth of anything.
@@ -223,7 +225,7 @@ def test_costs_are_reported_unweighted() -> None:
 
 def test_lagrangian_mode_ignores_constraints_until_multipliers_are_set() -> None:
     config = RewardConfig(mode=RewardMode.LAGRANGIAN)
-    composer = RewardComposer(config, budget_windows=50)
+    composer = RewardComposer(config)
     kwargs = dict(
         metrics=_metrics(overload_excess_percent=50.0),
         curtailed_energy_mwh=0.0,
@@ -235,6 +237,7 @@ def test_lagrangian_mode_ignores_constraints_until_multipliers_are_set() -> None
         k95_worst_bus_this_step=2,
         k100_worst_bus_this_step=0,
         windows_per_step=1.5,
+        k95_beyond_budget_worst_bus_this_step=0,
     )
     before = composer.compute(**kwargs)
     assert before.terms["en50160_k95"] == 0.0
@@ -244,7 +247,7 @@ def test_lagrangian_mode_ignores_constraints_until_multipliers_are_set() -> None
 
 
 def test_unknown_multiplier_is_rejected() -> None:
-    composer = RewardComposer(RewardConfig(), budget_windows=50)
+    composer = RewardComposer(RewardConfig())
     with pytest.raises(KeyError, match="Unknown constraint terms"):
         composer.set_multipliers({"not_a_term": 1.0})
 
@@ -270,6 +273,7 @@ def _step_costs(composer: RewardComposer, worst_k95: int, total_k95: int) -> dic
         k95_worst_bus_this_step=worst_k95,
         k100_worst_bus_this_step=0,
         windows_per_step=1.5,
+        k95_beyond_budget_worst_bus_this_step=0,
     ).costs
 
 
@@ -281,7 +285,7 @@ def test_mean_voltage_cost_is_the_share_of_violating_windows() -> None:
     minutes close three windows; one of them violating at the worst bus is a
     share of one third, whichever step it falls into.
     """
-    composer = RewardComposer(RewardConfig(), budget_windows=50)
+    composer = RewardComposer(RewardConfig())
     costs = [_step_costs(composer, 1, 4), _step_costs(composer, 0, 0)]
     mean = np.mean([c["en50160_k95"] for c in costs])
     assert mean == pytest.approx(1 / 3)
@@ -293,43 +297,80 @@ def test_voltage_cost_does_not_depend_on_how_many_buses_violate() -> None:
     A cost averaged over buses would let twelve compliant buses dilute one that
     fails -- the defect of the M3 normalisation.
     """
-    composer = RewardComposer(RewardConfig(), budget_windows=50)
+    composer = RewardComposer(RewardConfig())
     one = _step_costs(composer, worst_k95=1, total_k95=1)
     all_buses = _step_costs(composer, worst_k95=1, total_k95=13)
     assert one["en50160_k95"] == all_buses["en50160_k95"]
 
 
-def test_fixed_weight_reward_keeps_the_m3_formulation() -> None:
-    """``fixed_weights`` reproduces M3, including its dead K95 hinge.
-
-    The M3 runs are the reference the Lagrangian variant is validated against,
-    so the fixed-weight reward must not change under them. That includes the
-    defect: the K95 value of a step is at most ``2 * n_buses / (n_buses *
-    budget)`` = 0.04, below the hinge at 0.05, so the term never fires even
-    when every bus closes two violating windows in one step.
-    """
-    composer = RewardComposer(RewardConfig(), budget_windows=50)
-    result = composer.compute(
+def _fixed_weight_terms(beyond_budget: int, total_k95: int = 26) -> dict:
+    composer = RewardComposer(RewardConfig())
+    return composer.compute(
         metrics=_metrics(overload_excess_percent=40.0),
         curtailed_energy_mwh=0.2,
         setpoint_change_mw=0.1,
-        k95_violations_this_step=26,
+        k95_violations_this_step=total_k95,
         k100_violations_this_step=1,
         n_buses=13,
         dt_hours=0.25,
         k95_worst_bus_this_step=2,
         k100_worst_bus_this_step=1,
         windows_per_step=1.5,
+        k95_beyond_budget_worst_bus_this_step=beyond_budget,
+    ).terms
+
+
+def test_fixed_weight_k95_term_prices_only_windows_beyond_the_budget() -> None:
+    """Up to the budget an excursion is tolerated; beyond it the week fails.
+
+    Every bus closing two violating windows in one step costs nothing while the
+    budget lasts -- spending it is the agent's decision (§6.6). In M3 the term
+    was a hinge that could never fire, so it was zero in both cases.
+    """
+    within = _fixed_weight_terms(beyond_budget=0)
+    beyond = _fixed_weight_terms(beyond_budget=2)
+    assert within["en50160_k95"] == 0.0
+    assert beyond["en50160_k95"] == pytest.approx(-10.0 * 2)
+
+
+def test_fixed_weight_thermal_term_keeps_the_m3_trade_off() -> None:
+    """The weight triples because the cost is a third of the M3 value.
+
+    M3 computed ``-10 * sum of three samples / 100 * 0.25 h``; the corrected
+    cost is the mean of the samples times the step, so ``-30`` gives the same
+    product and the same trade-off every M3 and M4.0 policy learned.
+    """
+    samples = [30.0, 40.0, 50.0]
+    m3_term = -10.0 * sum(samples) / 100.0 * 0.25
+    composer = RewardComposer(RewardConfig())
+    corrected = composer.compute(
+        metrics=_metrics(overload_excess_percent=float(np.mean(samples))),
+        curtailed_energy_mwh=0.0,
+        setpoint_change_mw=0.0,
+        k95_violations_this_step=0,
+        k100_violations_this_step=0,
+        n_buses=13,
+        dt_hours=0.25,
+        k95_worst_bus_this_step=0,
+        k100_worst_bus_this_step=0,
+        windows_per_step=1.5,
+        k95_beyond_budget_worst_bus_this_step=0,
     )
-    assert result.terms["en50160_k95"] == 0.0
-    assert result.terms["en50160_k100"] == pytest.approx(-50.0 * 1 / 13)
-    assert result.terms["thermal_overload"] == pytest.approx(-10.0 * 0.4 * 0.25)
-    assert result.terms["pv_curtailment"] == pytest.approx(-0.2)
+    assert corrected.terms["thermal_overload"] == pytest.approx(m3_term)
+    assert corrected.costs["thermal_overload"] == pytest.approx(
+        float(np.mean(samples)) / 100.0 * 0.25
+    )
+
+
+def test_fixed_weight_k100_term_is_unchanged() -> None:
+    terms = _fixed_weight_terms(beyond_budget=0)
+    assert terms["en50160_k100"] == pytest.approx(-50.0 * 1 / 13)
+    assert terms["pv_curtailment"] == pytest.approx(-0.2)
 
 
 def test_lagrangian_terms_are_multiplier_times_cost() -> None:
     config = RewardConfig(mode=RewardMode.LAGRANGIAN)
-    composer = RewardComposer(config, budget_windows=50)
+    composer = RewardComposer(config)
     composer.set_multipliers({"en50160_k95": 2.0, "thermal_overload": 7.0})
     result = composer.compute(
         metrics=_metrics(overload_excess_percent=40.0),
@@ -342,6 +383,7 @@ def test_lagrangian_terms_are_multiplier_times_cost() -> None:
         k95_worst_bus_this_step=1,
         k100_worst_bus_this_step=0,
         windows_per_step=1.5,
+        k95_beyond_budget_worst_bus_this_step=0,
     )
     assert result.terms["en50160_k95"] == pytest.approx(-2.0 / 1.5)
     assert result.terms["thermal_overload"] == pytest.approx(-7.0 * 0.4 * 0.25)
@@ -357,7 +399,7 @@ def test_a_term_cannot_be_both_objective_and_constraint() -> None:
 
 
 def test_divergence_is_penalised_not_raised() -> None:
-    composer = RewardComposer(RewardConfig(), budget_windows=50)
+    composer = RewardComposer(RewardConfig())
     result = composer.compute(
         metrics=_metrics(converged=False),
         curtailed_energy_mwh=0.0,
@@ -369,6 +411,7 @@ def test_divergence_is_penalised_not_raised() -> None:
         k95_worst_bus_this_step=0,
         k100_worst_bus_this_step=0,
         windows_per_step=1.5,
+        k95_beyond_budget_worst_bus_this_step=0,
     )
     assert result.total == RewardConfig().divergence_penalty
 
@@ -378,7 +421,7 @@ def test_potential_penalises_spending_budget_early() -> None:
 
     Early consumption removes options.
     """
-    composer = RewardComposer(RewardConfig(), budget_windows=50)
+    composer = RewardComposer(RewardConfig())
     early = composer.potential(budget_used_max=0.5, week_progress=0.1)
     late = composer.potential(budget_used_max=0.5, week_progress=0.45)
     assert early < late <= 0.0
@@ -571,3 +614,63 @@ def test_pq_budget_features_are_present(env) -> None:
     assert any(n.startswith("pq/") for n in names)
     assert "pq/budget_used_max" in names
     assert "pq/week_progress" in names
+
+
+def test_overload_cost_is_the_integral_over_the_inner_power_flows() -> None:
+    """The thermal cost is sum(excess * sim_dt) / 100, measured independently.
+
+    M3 summed the excess of the three inner samples and multiplied by the whole
+    control step, three times the integral. This test recomputes the integral
+    from the grid states the engine actually produced, so it does not share the
+    environment's arithmetic.
+    """
+    pytest.importorskip("simbench", reason="extra 'sim' not installed")
+    from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
+    from lvgrid_rl.env.factory import make_env
+    from lvgrid_rl.grid.metrics import violation_metrics
+
+    spec = EpisodeSpec(mode=EpisodeMode.EVALUATE, randomise_budget=False)
+    e = make_env(seed=1, episode_spec=spec, set_name="stress")
+    for _ in range(3):  # advance to the PV-strongest stress week
+        e.reset(seed=1)
+    states = []
+    run = e.engine.run
+
+    def recording_run(setpoints, t_index):
+        state = run(setpoints, t_index)
+        states.append(state)
+        return state
+
+    e.engine.run = recording_run  # type: ignore[method-assign]
+    action = e.mapper.neutral_action()
+    reported = 0.0
+    for _ in range(96):  # one day, through the midday overload
+        reported += e.step(action)[4]["cost/thermal_overload"]
+
+    positions = e.model.evaluated_bus_positions
+    integral = sum(
+        violation_metrics(s, positions).overload_excess_percent / 100.0 * e.dt_hours
+        for s in states
+    )
+    assert integral > 0.0, "the stretch must contain overload to test anything"
+    assert reported == pytest.approx(integral)
+
+
+def test_windows_beyond_the_budget_are_counted_at_the_worst_bus() -> None:
+    """Only windows past a bus's budget count, and the worst bus decides."""
+    from types import SimpleNamespace
+
+    from lvgrid_rl.env.lv_grid_env import LVGridEnv
+
+    def fake(after: list[int]) -> SimpleNamespace:
+        state = SimpleNamespace(violations_k95_count=np.array(after))
+        aggregator = SimpleNamespace(budget_windows=50, state=lambda: state)
+        return SimpleNamespace(aggregator=aggregator)
+
+    before = np.array([49, 30, 50])
+    # Bus 0 crosses the budget with one of its two windows, bus 1 stays within,
+    # bus 2 was already at the budget and adds two beyond it.
+    count = LVGridEnv._windows_beyond_budget(fake([51, 32, 52]), before)  # noqa: SLF001
+    assert count == 2
+    within = LVGridEnv._windows_beyond_budget(fake([50, 32, 50]), before)  # noqa: SLF001
+    assert within == 0
