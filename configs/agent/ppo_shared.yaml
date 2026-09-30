@@ -1,0 +1,18 @@
+# Action mode 2 (decision D14): one network per asset kind, an individual
+# setpoint per asset. The PPO settings are those of ppo.yaml, so that the two
+# action modes differ in the policy and nothing else.
+#
+# Requires the per-asset observation layout; train.py selects it when this
+# policy is chosen. The layout itself comes from the environment, not from here.
+algo: ppo
+policy: SharedAssetPolicy
+hyperparams:
+  n_steps: 2048         # per worker; 16,384 per rollout with eight workers
+  batch_size: 64
+  learning_rate: 3.0e-4
+  n_epochs: 10
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.0
+policy_kwargs:
+  hidden: 64

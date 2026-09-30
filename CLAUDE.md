@@ -25,8 +25,8 @@ plus action mode 2 (per asset type). The steps are in `docs/architecture.md`
 §12; 4.0 (reward mode), the M3 corrections, 4.1 (battery model) and 4.2a
 (batteries in the environment, `train.py --storage`) are done. 4.2b (action
 mode 2, decision D14: weights shared per asset kind, an individual setpoint per
-asset) is in two parts: the per-asset observation layout is done, the shared
-policy class is next. **Invariant I2 is satisfied since 4.1**: asset dynamics
+asset) is done: the per-asset observation layout and `SharedAssetPolicy`
+(`--agent-config configs/agent/ppo_shared.yaml`). 4.3, the heat pump, is next. **Invariant I2 is satisfied since 4.1**: asset dynamics
 are pure functions over a frozen `AssetState`. Its test in
 `tests/test_invariants.py` is parametrised over asset types — every new asset
 model (heat pump, charge point) adds a case to `_i2_assets()`, it does not get a
@@ -75,6 +75,10 @@ under which the multiplier can only grow.
 - **Result files from M3 and M4.0 are KPI schema 1**: their overload is three
   times the integral. The scripts refuse to mix them with current (schema 2)
   files; convert by dividing overload by 3, or recompute.
+- **PyTorch runs with one thread** (`--torch-threads`, default 1). With the
+  default pool the shared policy took 7.6 ms per decision instead of 1.0: the
+  threads fall asleep during every environment step and have to be woken for
+  each of its many small operations.
 - **A standard-conforming evaluation costs about 20 minutes per controller**
   over the nine test weeks. Use `--policy-only` and `--baselines-from` for
   additional seeds.
