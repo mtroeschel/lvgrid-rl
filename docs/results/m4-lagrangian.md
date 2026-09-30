@@ -1,8 +1,15 @@
 # M4.0: validating the Lagrangian reward mode on the M3 setup
 
-**Status: pre-registered, results pending.** The criteria and the decision rule
-below were written before the first run finished, so that the decision on the
-reward mode for M4 does not adapt to what the runs happen to show.
+**Status: decided on four of five seeds; seed 5 still running.** The criteria
+and the decision rule below were written and committed (`86c32f9`) before the
+first run finished, so that the decision on the reward mode for M4 does not
+adapt to what the runs happen to show.
+
+**Verdict: V1 and V2 hold, V3 fails. M4 stays on fixed weights.** The mechanism
+works -- multipliers converge, reach the workers and hold the constraints -- but
+it does not reach a better operating point than the hand-set weight: two of four
+policies are dominated by a measured cap, against at most one of five allowed.
+Seed 5 cannot change that outcome.
 
 ## Question
 
@@ -97,4 +104,47 @@ satisfied by tuning until it passes.
 
 ## Results
 
-Pending.
+Test weeks, `EpisodeMode.EVALUATE`. Seed 5 is still training; its row and the
+IQM over five seeds follow when it finishes.
+
+| seed | run | final λ thermal | λ change, last 20 % | pass rate | overload | curtailed | dominated by |
+|---|---|---|---|---|---|---|---|
+| 1 | `3adc98ffd9f1` | 37.76 | +2.4 % | 1.0 | 0.000 | 44.92 MWh | cap 0.11 |
+| 2 | `706bacbf9f20` | 33.61 | +3.3 % | 1.0 | 0.079 | 36.98 MWh | -- |
+| 3 | `092a9bddbcec` | 43.65 | +4.3 % | 1.0 | 0.000 | 40.56 MWh | -- |
+| 4 | `5d1b1b73241d` | 40.00 | +2.7 % | 1.0 | 0.000 | 46.61 MWh | caps 0.10, 0.11 |
+
+The K95 multiplier stayed at zero in every run, and the K100 multiplier below
+0.05 -- as expected in a scenario where voltage does not bind.
+
+**V1 holds.** No multiplier reached its bound; the thermal multiplier changed by
+2 to 4 % over the last seven of 37 updates. It is still rising, as it must with a
+limit of zero: the stochastic training policy produces a residual overload of
+about 0.0005 per step, so `J_c − d` stays positive. "Converged" here means the
+growth has slowed, not stopped; with a longer budget the multiplier would keep
+climbing.
+
+**V2 holds.** Pass rate 1.0 and overload between 0 and 0.08 in every seed.
+
+**V3 fails.** Seeds 1 and 4 curtail more than a cap for the same zero overload.
+In M3, one of five policies was dominated.
+
+### Reading
+
+- **The dual prices ended three to four times above the M3 weight** of 10. The
+  constraint was already held at that weight, so the Lagrangian runs paid a
+  higher price for the same corner, which is consistent with the dominated
+  seeds curtailing more. The relation is not clean, though: seed 3 has the
+  highest multiplier and the best point, so the data do not show that the price
+  alone explains the outcome.
+- **The best single point is a Lagrangian one.** Seed 3 reaches zero overload
+  with 40.56 MWh, against 41.21 MWh for the best M3 policy and 43.12 MWh for the
+  best cap. Seed 2 at 36.98 MWh and 0.079 overload dominates the M3 policy
+  `eaca5d1d` (37.00, 0.303). The spread across seeds, 37 to 47 MWh, is as wide
+  as in M3 (34 to 47 MWh), so none of this separates the formulations.
+- **The zero limit is the structural weak point**, as expected before the runs:
+  with `d = 0` the multiplier can only grow, so what it settles at depends on
+  the training budget and the exploration noise rather than on the problem.
+  A small positive thermal limit, or a cost measured on the deterministic
+  policy, would address that. Either one is a different experiment with its own
+  pre-registration, not a correction round under this rule.
