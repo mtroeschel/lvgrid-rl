@@ -45,7 +45,14 @@ from lvgrid_rl.core.schemas import (
 from lvgrid_rl.data.timebase import TimeBase
 from lvgrid_rl.env.actions import ActionMapper
 from lvgrid_rl.env.episodes import Episode, EpisodeSampler
-from lvgrid_rl.env.obs import ObservationBuilder, ObservationSpec
+from lvgrid_rl.env.obs import (
+    AssetFeatureSpec,
+    ObservationBuilder,
+    ObservationLayout,
+    ObservationLayoutMode,
+    ObservationSpec,
+    observation_layout,
+)
 from lvgrid_rl.env.reward import RewardComposer, RewardConfig
 from lvgrid_rl.grid.loader import GridModel
 from lvgrid_rl.grid.metrics import ViolationMetrics, violation_metrics
@@ -165,6 +172,11 @@ class LVGridEnv(gym.Env):
                     (a.asset_id, a.capacity_mwh) for a in self.assets if a.kind == "bess"
                 ),
             )
+        if (
+            observation_spec.layout is ObservationLayoutMode.PER_ASSET
+            and not observation_spec.assets
+        ):
+            observation_spec = replace(observation_spec, assets=self._asset_features())
         self.obs_builder = ObservationBuilder(observation_spec, model.n_evaluated_buses)
 
         self.action_space = spaces.Box(
@@ -194,6 +206,40 @@ class LVGridEnv(gym.Env):
     def dt_hours(self) -> float:
         """Duration of one simulation step in hours."""
         return self.config.sim_dt_min / 60.0
+
+    def _asset_features(self) -> tuple[AssetFeatureSpec, ...]:
+        """Per-asset feature specifications, in action order."""
+        order = list(self.model.connection_point_buses)
+        pv_at_bus: dict[int, list[str]] = {}
+        for asset in self.assets:
+            if asset.kind == "pv":
+                pv_at_bus.setdefault(asset.bus, []).append(asset.series_id)
+        specs = []
+        for asset in self.assets:
+            rated = max(abs(asset.ratings.p_min_mw), abs(asset.ratings.p_max_mw))
+            specs.append(
+                AssetFeatureSpec(
+                    asset_id=asset.asset_id,
+                    kind=asset.kind,
+                    bus_position=order.index(asset.bus),
+                    rated_p_mw=rated,
+                    series_id=getattr(asset, "series_id", None),
+                    capacity_mwh=getattr(asset, "capacity_mwh", None),
+                    colocated_series=tuple(pv_at_bus.get(asset.bus, ()))
+                    if asset.kind == "bess"
+                    else (),
+                )
+            )
+        return tuple(specs)
+
+    @property
+    def observation_layout(self) -> ObservationLayout:
+        """Global block, per-asset blocks and each asset's action range.
+
+        Only for the per-asset observation layout; what a policy with weights
+        shared per asset kind is built from.
+        """
+        return observation_layout(self.obs_builder, self.mapper)
 
     @property
     def multipliers(self) -> Mapping[str, float]:

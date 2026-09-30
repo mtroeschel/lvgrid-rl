@@ -576,15 +576,49 @@ measurements plus local house connection values). Observation normalisation uses
 fixed physical scales rather than learned statistics, which is required for the
 multi-agent path and better for reproducibility anyway.
 
+**Layout (M4).** Two layouts over the same feature groups. `flat`, the default
+and the M3 layout, puts the groups one after another; it is unchanged by M4
+(verified bit for bit, with and without batteries). `per_asset` splits the vector
+into a **global block** — time, network measurements, EN 50160 budget, slack
+power — and **one block per asset**, of a fixed width per asset kind and in
+action order:
+
+| kind | block |
+|---|---|
+| PV | local voltage, rating, last setpoint, own forecast over the horizon |
+| BESS | local voltage, rating, last setpoint, state of charge, energy-to-power ratio, forecast of the PV at the same bus |
+
+Powers are relative to the asset's rating, with the rating as a feature of its
+own, so that assets of different size look alike to a shared network without
+losing their size. Forecasts and states of charge live in the blocks rather
+than in global groups. The local voltage is a house connection value and is
+therefore present under both sensor configurations; only the global block
+differs. `ObservationLayout` records where each block sits and which action
+components it belongs to. Reordering the assets permutes the blocks and leaves
+the global block unchanged, which makes a network shared per kind equivariant.
+
+*Limitation.* The global block is independent of the number of assets, not of
+the number of buses: under `full_state` it holds every assessed voltage. A
+transfer to another grid (M10) needs it condensed, for example to extremes and
+quantiles.
+
 ### 6.3 Action space
 
 Three modes, all through the same `ActionMapper`:
 
 1. **Flat centralised** — one `Box` vector over all actuators. Simplest entry
    point, scales poorly.
-2. **Parameterised per asset type** — the agent emits a parameter vector per
-   asset type, applied to all instances through a type-specific encoder
-   (parameter sharing, invariant to the number of assets).
+2. **Parameterised per asset type** — parameter sharing per asset kind,
+   invariant to the number of assets. *Settled in M4 (D14):* the sharing lies
+   in the **network weights**, not in the action space. One network per kind
+   maps the global block and an asset's own block (§6.2, `per_asset` layout) to
+   that asset's individual power setpoint, so the action space stays the flat,
+   affine and invertible one of mode 1. The alternative the text originally
+   described — a parameter vector per kind, such as the settings of a local
+   characteristic, decoded into setpoints — was rejected because that mapping
+   is neither affine nor invertible (I4), which rules out the `store_executed`
+   coupling the certified arm is fixed to (§7.1, §7.2). Learned
+   characteristics remain a candidate reference method, not an action mode.
 3. **Multi-agent** — one agent per actuator or per feeder; the environment
    additionally offers a PettingZoo-compatible interface.
 
@@ -1483,6 +1517,7 @@ finished shield, and M9 is additive.
 | D11 | working grid and scenario | `1-LV-rural1--2-sw` with `moderate_growth`; extreme cases as declared test scenarios | §4.4 |
 | D12 | language | English throughout, including error messages | `CONTRIBUTING.md` |
 | D13 | evaluation split | **stratified week split with an embargo** instead of a chronological block; stress weeks and a held-out month reported separately | §6.5 |
+| D14 | action mode 2 | **weights shared per asset kind, individual setpoint per asset**, instead of a parameter vector per kind decoded by a characteristic: keeps the action space affine and invertible (I4) and so compatible with the certified arm, and matches the operational use case of a setpoint per asset | §6.3 |
 
 ### 13.1 What D2 actually costs
 
