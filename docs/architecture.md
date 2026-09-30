@@ -410,21 +410,41 @@ class FlexAsset(Protocol):
     def obs_spec(self) -> ObsSpec: ...
     def initial_state(self, rng) -> AssetState: ...
 
-    def to_setpoint(self, s, action, info) -> Setpoint:
-        # action -> (p_mw, q_mvar). Affine and invertible; every limitation is
-        # reported in Setpoint.clipping_info, never applied silently.
+    def to_setpoint(self, s, action, info, hold_min) -> Setpoint:
+        # action -> (p_mw, q_mvar), projected onto what can be held for the
+        # control step. Every limitation is reported in Setpoint.clipping_info,
+        # never applied silently.
         ...
 
-    def dynamics(self, s, sp, x, g) -> tuple[AssetState, AssetOutcome]:
+    def limit_to_physics(self, s, sp, x, dt_min) -> Setpoint:
+        # Per simulation step, before the power flow: what only becomes known
+        # inside the hold (irradiance for PV, the battery management cut-off).
+        ...
+
+    def dynamics(self, s, sp, x, g, dt_min) -> tuple[AssetState, AssetOutcome]:
         # Pure function: same input, same output, no side effects. Enables
-        # hypothetical roll-outs.
+        # hypothetical roll-outs. Outcomes are energies over dt_min.
         ...
 ```
+
+**Two time scales, two limits (M4).** A decision is held for `control_dt`, the
+physics runs in steps of `sim_dt`, and the protocol names both. Up to M3 it named
+neither: `dynamics` had no step duration, so the PV model returned a power in
+`curtailed_energy_mwh` and left the multiplication to the environment, and the
+irradiance limit was a PV-only method. A battery makes both untenable — its state
+of charge has to be integrated inside `dynamics`, and whether a setpoint can be
+held depends on how long it is held. `to_setpoint` therefore receives the hold
+duration and projects onto the set that is feasible for all of it; `limit_to_physics`
+applies per simulation step what could not be foreseen. The change was verified
+not to alter the M3 environment: identical rewards, curtailment, overload and K95
+counts over a day of random actions.
 
 Three commitments in this protocol that look like formalism but keep later
 certification reachable (§14):
 
-- **`dynamics` is a pure function**, `AssetState` a copyable value object. A
+- **All three methods on the decision path are pure functions** —
+  `to_setpoint`, `limit_to_physics`, `dynamics` — and `AssetState` is a frozen,
+  copyable value object; the asset object holds parameters only. A
   predictive safety filter has to roll asset states forward over a horizon;
   with state-mutating methods that is impossible without rewriting the models.
 - **Actions are physical power quantities**, not normalised fractions or target
@@ -439,11 +459,22 @@ certification reachable (§14):
 power within the inverter capability diagram (`S_max` circle, cosφ limits). Modes:
 `p_only`, `q_only`, `pq`.
 
-**BESS.** State-of-charge integration with separate charge and discharge
-efficiencies, SoC limits, C-rate limits, optional self-discharge and a simple
-degradation model as a cost term. Actions are projected onto the physically
-feasible range, and the projection is reported so that a policy systematically
-proposing infeasible actions is visible.
+**BESS** (`components/bess.py`, M4). State-of-charge integration with separate
+charge and discharge efficiencies, SoC operating limits, power limits from the
+ratings (where a C-rate limit is expressed), a standing loss as the
+self-discharge that matters for home storage, and the terminal throughput as the
+basis of a degradation cost term. The state holds stored energy in MWh, not a
+fraction, so capacity remains a parameter. Actions are projected onto the power
+interval that can be held for the control step — conservatively, so that the
+physics limit never has to intervene for a projected setpoint — and the
+projection is reported under its own key (`p_mw_soc`, distinct from `p_mw` for
+the rating), so that a policy systematically proposing infeasible actions is
+visible. That interval is also what the certified shield will need per asset,
+and it is a box. The SoC limits bind the controller, not physics: the standing
+loss may drain an idle battery below the lower limit, down to empty. `dynamics`
+raises rather than clamps when handed a setpoint that crosses a limit, because a
+clamp there would be exactly the silent limitation I4 forbids. Not modelled:
+voltage- or temperature-dependent efficiency, calendar ageing, reactive power.
 
 **Heat pump.** Not a load profile but a **shiftable load with state**: heat demand
 from data, COP(T_ambient, T_flow) from when2heat characteristics, and a store.
@@ -1325,6 +1356,16 @@ than the best cap — genuinely on the frontier, but by a small margin. With PV
 curtailment as the only actuator that is about what one should expect, which is
 the main argument for M4.
 
+*M4 is cut into steps, one pull request each.* 4.0 settled the reward mode on
+the M3 setup (fixed weights, `docs/results/m4-lagrangian.md`); the three defects
+it uncovered in M3 were corrected separately. 4.1 is the battery model with the
+sharpened asset protocol and invariant I2. Then: 4.2 action mode 2 and the
+battery in the environment, with the degradation term in the reward; 4.3 the
+heat pump with buffer store; 4.4 EV sessions from emobpy, calibrated against
+ElaadNL; 4.5 reference behaviour for the new assets and a survey of whether heat
+pump and EV load make the lower voltage limit bind; 4.6 the acceptance runs,
+preceded by a new learning-curve diagnostic because the action space grows.
+
 *M3 is not a toy.* Under `moderate_growth` the fallback action brings loading from
 280 % to 55.6 % and voltage to 1.051 pu, so PV curtailment alone resolves both the
 voltage and the thermal problem. M3 is therefore a complete control problem with a
@@ -1487,7 +1528,7 @@ seven are cheap now and expensive to impossible later.
 | | Invariant | Why M9 needs it | Status | Cost of retrofitting |
 |---|---|---|---|---|
 | **I1** | `SystemState` complete and separate from `Observation` | the certifier needs the full state, the agent may see less | due M3 | high — touches every environment component |
-| **I2** | asset dynamics as **pure functions** over a copyable `AssetState` | the predictive safety filter rolls states forward hypothetically | due M4 | **very high** — rewriting every asset model |
+| **I2** | asset dynamics as **pure functions** over a copyable `AssetState` | the predictive safety filter rolls states forward hypothetically | **satisfied** (M4, PV and BESS; the test is parametrised over asset types) | **very high** — rewriting every asset model |
 | **I3** | strict information ordering: action construction uses only `InformationSet(t)` | a guarantee based on information the real controller lacks is not one | **satisfied** (mechanism M0, environment M3) | **very high** — the bug is diffuse and hard to find |
 | **I4** | actions in physical units, normalisation affine and invertible, clipping reported | the certified feasible set is formulated in injections; projection needs box coordinates | due M3 | medium-high — changes the action space and all results |
 | **I5** | `PowerFlowEngine.run_hypothetical` without side effects | backup trajectories and falsification search need it | **satisfied** (M2) | medium |

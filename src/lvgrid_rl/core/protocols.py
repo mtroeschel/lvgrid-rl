@@ -118,17 +118,27 @@ class Setpoint:
 
 @dataclass(frozen=True, slots=True)
 class AssetOutcome:
-    """Consequences of one time step that matter for reward and KPIs.
+    """Consequences of one simulation step that matter for reward and KPIs.
 
     The quantities are physical and unweighted. Weighting happens in the
     ``RewardComposer``; the comparison against reference methods is made on
     these raw quantities and never on the reward (section 6.4).
+
+    Energies are energies **over the step** passed to
+    :meth:`FlexAsset.dynamics`, not powers. Until M4 the PV model returned a
+    power in ``curtailed_energy_mwh`` and left the multiplication to the caller,
+    because the protocol did not pass a step duration; the suffix promised MWh
+    and the value was MW.
     """
 
     curtailed_energy_mwh: float = 0.0
     unserved_energy_mwh: float = 0.0
     comfort_deviation_kh: float = 0.0
     throughput_energy_mwh: float = 0.0
+    """Energy through the asset's grid terminal, charging and discharging alike.
+    The basis of the degradation cost term."""
+    loss_energy_mwh: float = 0.0
+    """Conversion and standing losses inside the asset."""
     switching_count: int = 0
 
 
@@ -141,10 +151,20 @@ class AssetOutcome:
 class FlexAsset(Protocol):
     """Controllable asset connected to the grid.
 
-    **Invariant I2:** :meth:`dynamics` is a pure function. The same input yields
-    the same output, and no input is mutated. A predictive safety filter has to
-    roll asset states forward hypothetically over a horizon; with state-mutating
-    methods that could only be retrofitted by rewriting every asset model.
+    **Invariant I2:** :meth:`to_setpoint`, :meth:`limit_to_physics` and
+    :meth:`dynamics` are pure functions. The same input yields the same output,
+    no input is mutated, and the asset object itself holds parameters only,
+    never state. A predictive safety filter has to roll asset states forward
+    hypothetically over a horizon; with state-mutating methods that could only be
+    retrofitted by rewriting every asset model.
+
+    **Two time scales.** A decision is made once per control step and held for
+    ``hold_min``; the physics runs in simulation steps of ``dt_min``.
+    :meth:`to_setpoint` projects the action onto what is feasible for the whole
+    hold and reports every limitation -- that is where a policy proposing the
+    infeasible becomes visible. :meth:`limit_to_physics` then applies what can
+    only be known inside the hold (irradiance, a state reached earlier than
+    foreseen) once per simulation step, before the power flow.
     """
 
     asset_id: str
@@ -160,12 +180,22 @@ class FlexAsset(Protocol):
         ...
 
     def to_setpoint(
-        self, s: AssetState, action: np.ndarray, info: InformationSet
+        self, s: AssetState, action: np.ndarray, info: InformationSet, hold_min: float
     ) -> Setpoint:
-        """Map an action onto an operating point.
+        """Map an action onto an operating point held for ``hold_min``.
 
-        Limiting to the physically feasible range is allowed but must be
-        reported in ``Setpoint.clipping_info``.
+        Limiting to the feasible range is allowed but must be reported in
+        ``Setpoint.clipping_info``.
+        """
+        ...
+
+    def limit_to_physics(
+        self, s: AssetState, sp: Setpoint, x: ExogenousInput, dt_min: float
+    ) -> Setpoint:
+        """Limit a held setpoint to what is physically possible in this step.
+
+        Applied once per simulation step, before the power flow. Returns ``sp``
+        itself when nothing is limited.
         """
         ...
 
@@ -175,8 +205,9 @@ class FlexAsset(Protocol):
         sp: Setpoint,
         x: ExogenousInput,
         g: GridState,
+        dt_min: float,
     ) -> tuple[AssetState, AssetOutcome]:
-        """Advance the state as a pure function."""
+        """Advance the state by ``dt_min`` as a pure function."""
         ...
 
 

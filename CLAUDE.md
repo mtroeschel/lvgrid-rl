@@ -19,13 +19,15 @@ say so in the commit.
 
 ## Current state
 
-M0 to M3 are complete. **M4 is next: the full actuator set** — battery storage,
-heat pump with a buffer model, EV charge points with a session model, plus action
-mode 2 (per asset type). **Invariant I2 falls due**: asset dynamics must be pure
-functions over a copyable `AssetState`, because a later predictive safety filter
-rolls states forward hypothetically. Its `xfail(strict=True)` test will break the
-build the moment `components/bess.py` exists — that is intended, and the test is
-then written out rather than the marker removed.
+M0 to M3 are complete. **M4 is in progress: the full actuator set** — battery
+storage, heat pump with a buffer model, EV charge points with a session model,
+plus action mode 2 (per asset type). The steps are in `docs/architecture.md`
+§12; 4.0 (reward mode), the M3 corrections and 4.1 (battery model) are done. **Invariant I2 is satisfied since 4.1**: asset dynamics
+are pure functions over a frozen `AssetState`. Its test in
+`tests/test_invariants.py` is parametrised over asset types — every new asset
+model (heat pump, charge point) adds a case to `_i2_assets()`, it does not get a
+test of its own. The protocol passes `hold_min` to `to_setpoint` and `dt_min` to
+`limit_to_physics` and `dynamics`; `AssetOutcome` holds energies over the step.
 
 **The reward mode for M4 is settled: fixed weights** (`docs/results/m4-lagrangian.md`,
 §13 D5). The Lagrangian mode was validated on the M3 setup against pre-registered

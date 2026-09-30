@@ -13,8 +13,9 @@ soon as it exists and the test turns green unexpectedly, **the build breaks** an
 forces the marker to be removed. The number of XFAIL reports is therefore the
 contract's debt count, readable in every CI run.
 
-Status: I3, I5 and I6 are satisfied (I6 since the SimBench adapter in M1, I5
-since the power flow engine in M2). I1, I4 and I7 fall due in M3, I2 in M4.
+Status: all seven are satisfied. I6 since the SimBench adapter in M1, I5 since
+the power flow engine in M2, I1, I3, I4 and I7 since the environment in M3, and
+I2 since the battery model in M4.
 """
 
 from __future__ import annotations
@@ -108,12 +109,111 @@ def test_i1_system_state_is_the_single_source_of_truth_today() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    not _module_available("lvgrid_rl.components.bess"),
-    strict=True,
-    reason="I2 falls due with the asset models in M4.",
-)
-def test_i2_asset_dynamics_are_pure_functions() -> None:
+def _i2_context():
+    """Exogenous input, information set and grid state shared by all cases."""
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    from lvgrid_rl.core.schemas import GridState, PQBudgetState  # noqa: PLC0415
+
+    series = ("sgen:0", "load:0")
+    exogenous = ExogenousInput(
+        t_index=0,
+        series_ids=series,
+        realized_mw=np.array([-0.012, 0.004]),
+        bounds_mw=np.array([[-0.02, 0.0], [0.0, 0.01]]),
+        ambient_temp_degc=12.0,
+        ghi_wm2=600.0,
+    )
+    info = InformationSet(
+        t_index=0,
+        timestamp=datetime(2016, 6, 1, 12, 0, tzinfo=UTC),
+        measurements={},
+        asset_states={},
+        series_ids=series,
+        exogenous_bounds_mw=np.array([[-0.02, 0.0], [0.0, 0.01]]),
+        forecast={"sgen:0": np.array([-0.012])},
+        pq=PQBudgetState(windows_elapsed_count=0),
+    )
+    grid = GridState(
+        t_index=0,
+        vm_pu=np.full(3, 1.02),
+        line_loading_percent=np.array([40.0, 35.0]),
+        trafo_loading_percent=np.array([60.0]),
+        p_slack_mw=0.01,
+        losses_mw=0.0003,
+        converged=True,
+    )
+    return exogenous, info, grid
+
+
+def _i2_assets():
+    """One representative per asset type. New types add a line here.
+
+    The actions are chosen so that the roll-out crosses the interesting
+    boundaries: the PV request exceeds what is available, and the battery is
+    asked to charge into its upper limit, then to discharge past its rated
+    power.
+    """
+    from lvgrid_rl.components.bess import BatteryStorage  # noqa: PLC0415
+    from lvgrid_rl.components.pv import PvSystem  # noqa: PLC0415
+    from lvgrid_rl.core.schemas import AssetRatings, Interval  # noqa: PLC0415
+
+    pv = PvSystem(
+        asset_id="sgen:0",
+        bus=1,
+        ratings=AssetRatings(p_min_mw=-0.02, p_max_mw=0.0),
+        series_id="sgen:0",
+    )
+    battery = BatteryStorage(
+        asset_id="storage:0",
+        bus=2,
+        ratings=AssetRatings(p_min_mw=-0.005, p_max_mw=0.005),
+        capacity_mwh=0.01,
+        eta_charge_frac=0.96,
+        eta_discharge_frac=0.94,
+        standing_loss_mw=0.00002,
+        initial_soc_frac=Interval(0.8, 0.9),
+    )
+    pv_actions = [np.array([v]) for v in (-0.02, -0.006, 0.0, -0.015, -0.01, -0.02)]
+    battery_actions = [np.array([v]) for v in (0.005, 0.005, 0.004, -0.008, -0.003, 0.0)]
+    return [("pv", pv, pv_actions), ("battery", battery, battery_actions)]
+
+
+def _i2_step(asset, state, action, context, hold_min=15, dt_min=5):
+    """One control step: decide, then three simulation steps of physics."""
+    exogenous, info, grid = context
+    setpoint = asset.to_setpoint(state, action, info, hold_min)
+    outcomes = []
+    for _ in range(hold_min // dt_min):
+        applied = asset.limit_to_physics(state, setpoint, exogenous, dt_min)
+        state, outcome = asset.dynamics(state, applied, exogenous, grid, dt_min)
+        outcomes.append(outcome)
+    return state, setpoint, outcomes
+
+
+def _snapshot(obj):
+    """A deep copy that compares by value, arrays included."""
+    import copy  # noqa: PLC0415
+
+    return copy.deepcopy(obj)
+
+
+def _same(a, b) -> bool:
+    if dataclasses.is_dataclass(a) and dataclasses.is_dataclass(b):
+        return type(a) is type(b) and all(
+            _same(getattr(a, f.name), getattr(b, f.name)) for f in dataclasses.fields(a)
+        )
+    if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
+        return np.array_equal(a, b)
+    if isinstance(a, (tuple, list)) and isinstance(b, (tuple, list)):
+        return len(a) == len(b) and all(_same(u, v) for u, v in zip(a, b, strict=True))
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same(a[k], b[k]) for k in a)
+    return a == b
+
+
+@pytest.mark.parametrize("case", _i2_assets(), ids=lambda c: c[0])
+def test_i2_asset_dynamics_are_pure_functions(case) -> None:
     """I2: ``dynamics`` is deterministic and free of side effects.
 
     The predictive safety filter has to roll asset states forward
@@ -127,10 +227,72 @@ def test_i2_asset_dynamics_are_pure_functions() -> None:
       are unchanged after the call;
     * a chain of N calls yields the same result as N individual calls with the
       state handed on.
-    """
-    from lvgrid_rl.components.bess import BatteryStorage  # noqa: PLC0415
 
-    raise AssertionError(f"assertions for {BatteryStorage} still to be written")
+    Checked for all three methods on the decision path -- ``to_setpoint``,
+    ``limit_to_physics`` and ``dynamics`` -- because a filter rolling forward
+    calls all three. The third criterion is read as: the result of a roll-out
+    does not depend on anything the asset object remembers between calls. A
+    chain run in one go must equal the same calls issued one at a time on
+    copies of the handed-on state, with an unrelated branch interleaved.
+    """
+    _, asset, actions = case
+    context = _i2_context()
+    exogenous, info, grid = context
+    asset_before = _snapshot(asset)
+    s0 = asset.initial_state(np.random.default_rng(3))
+
+    # Criteria 1 and 2, per method.
+    setpoint = asset.to_setpoint(s0, actions[0], info, 15)
+    inputs = _snapshot((s0, actions[0], exogenous))
+    assert _same(setpoint, asset.to_setpoint(s0, actions[0], info, 15))
+    applied = asset.limit_to_physics(s0, setpoint, exogenous, 5)
+    assert _same(applied, asset.limit_to_physics(s0, setpoint, exogenous, 5))
+    setpoint_before = _snapshot(setpoint)
+    first = asset.dynamics(s0, applied, exogenous, grid, 5)
+    second = asset.dynamics(s0, applied, exogenous, grid, 5)
+    assert _same(first, second), "same input, different output"
+    assert _same((s0, actions[0], exogenous), inputs), "an input was mutated"
+    assert _same(setpoint, setpoint_before), "the setpoint was mutated"
+
+    # Criterion 3: a chain in one go ...
+    state = s0
+    chained = []
+    for action in actions:
+        state, sp, outcomes = _i2_step(asset, state, action, context)
+        chained.append((state, sp, outcomes))
+
+    # ... equals the same calls one at a time on copies of the handed-on state,
+    # with an unrelated branch in between that the asset object must not
+    # remember.
+    state = _snapshot(s0)
+    for index, action in enumerate(actions):
+        _i2_step(asset, _snapshot(s0), actions[-1 - index], context)
+        state, sp, outcomes = _i2_step(asset, _snapshot(state), action, context)
+        assert _same((state, sp, outcomes), chained[index]), f"diverged at step {index}"
+
+    assert _same(asset, asset_before), "the asset object changed"
+    # The roll-out must have gone somewhere: a model that never leaves its
+    # initial state passes all of the above trivially.
+    assert not _same(chained[-1][0], s0)
+
+
+@pytest.mark.parametrize("case", _i2_assets(), ids=lambda c: c[0])
+def test_i2_asset_states_are_immutable_values(case) -> None:
+    """``AssetState`` is a frozen value object: copyable, comparable, hashable.
+
+    A filter branching from one state needs to hand the same state to several
+    roll-outs; that is only safe if nothing can write to it.
+    """
+    import copy  # noqa: PLC0415
+
+    _, asset, _ = case
+    state = asset.initial_state(np.random.default_rng(0))
+    assert dataclasses.is_dataclass(state)
+    assert type(state).__dataclass_params__.frozen  # type: ignore[attr-defined]
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        state.asset_id = "other"  # type: ignore[misc]
+    assert copy.deepcopy(state) == state
+    assert hash(state) == hash(copy.copy(state))
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +420,7 @@ def test_i4_action_normalisation_is_affine_and_invertible() -> None:
         pq=PQBudgetState(windows_elapsed_count=0),
     )
     state = asset.initial_state(np.random.default_rng(0))
-    setpoint = asset.to_setpoint(state, np.array([-0.02]), info)
+    setpoint = asset.to_setpoint(state, np.array([-0.02]), info, hold_min=15)
     assert setpoint.was_clipped, "limitation must be reported, not applied silently"
     assert setpoint.clipping_info
 

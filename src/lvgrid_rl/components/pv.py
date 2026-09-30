@@ -97,9 +97,12 @@ class PvSystem:
         return PvState(asset_id=self.asset_id)
 
     def to_setpoint(
-        self, s: PvState, action: np.ndarray, info: InformationSet
+        self, s: PvState, action: np.ndarray, info: InformationSet, hold_min: float
     ) -> Setpoint:
         """Map an action onto an operating point.
+
+        ``hold_min`` is unused: curtailment has no memory, so what is feasible
+        does not depend on how long a setpoint is held.
 
         The available power is taken from the forecast entry for this asset's
         series, which at decision time is what a real controller would have. Any
@@ -143,7 +146,9 @@ class PvSystem:
             clipping_info=clipping,
         )
 
-    def apply_availability(self, sp: Setpoint, x: ExogenousInput) -> Setpoint:
+    def limit_to_physics(
+        self, s: PvState, sp: Setpoint, x: ExogenousInput, dt_min: float
+    ) -> Setpoint:
         """Limit a setpoint to the power actually available at this instant.
 
         This is physics, not control, and therefore lives outside
@@ -176,16 +181,15 @@ class PvSystem:
         sp: Setpoint,
         x: ExogenousInput,
         g: GridState,
+        dt_min: float,
     ) -> tuple[PvState, AssetOutcome]:
         """Advance the state as a pure function (invariant I2).
 
         The curtailed energy is the gap between what was available and what was
-        fed in, over one simulation step. Both quantities are negative in the
-        consumer convention, so the difference is taken on magnitudes.
+        fed in, over the step. Both quantities are negative in the consumer
+        convention, so the difference is taken on magnitudes.
         """
         available = float(x.realized_mw[x.series_ids.index(self.series_id)])
-        # Power, not energy: the caller multiplies by the step duration, because
-        # only it knows the step size.
         curtailed_mw = max(abs(available) - abs(sp.p_mw), 0.0)
         switched = int(abs(sp.p_mw - s.last_p_mw) > 1e-9)
         return (
@@ -195,7 +199,7 @@ class PvSystem:
                 last_q_mvar=sp.q_mvar,
             ),
             AssetOutcome(
-                curtailed_energy_mwh=curtailed_mw,
+                curtailed_energy_mwh=curtailed_mw * (dt_min / 60.0),
                 switching_count=switched,
             ),
         )
