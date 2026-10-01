@@ -43,7 +43,7 @@ def main() -> None:
     cop = read_cop(target, verify=False)
     print(f"verified: {target} ({WHEN2HEAT_VERSION})")
     print(f"  period UTC: {cop.frame.index[0]} -> {cop.frame.index[-1]}")
-    print(f"  filled autumn daylight-saving hours: {len(cop.filled_utc)}")
+    print(f"  filled spring daylight-saving hours: {len(cop.filled_utc)}")
 
 
 if __name__ == "__main__":

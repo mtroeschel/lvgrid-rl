@@ -20,18 +20,35 @@ RAW = Path("data/raw/when2heat/when2heat-2023-07-27.csv")
 
 
 def _write(path: Path, index: pd.DatetimeIndex, value=lambda i: 3.0 + 0.01 * i) -> Path:
-    """A file in when2heat's format: semicolons, decimal commas, DE and AT columns."""
-    columns = {"utc_timestamp": index.strftime("%Y-%m-%dT%H:%M:%SZ")}
-    columns["cet_cest_timestamp"] = index.tz_convert("Europe/Berlin").strftime(
-        "%Y-%m-%dT%H:%M:%S%z"
-    )
-    for country in ("AT", "DE"):
-        for source in ("ASHP", "GSHP", "WSHP"):
-            for sink in SINKS:
-                columns[f"{country}_COP_{source}_{sink}"] = [
-                    f"{value(i):.2f}".replace(".", ",") for i in range(len(index))
-                ]
-    pd.DataFrame(columns).to_csv(path, sep=";", index=False)
+    """A file in when2heat's format, with when2heat's time-axis defect.
+
+    ``index`` is the *true* UTC time of each value. when2heat writes that time
+    onto the local wall clock as if it were UTC -- so ``cet_cest_timestamp``
+    shows the true UTC time with the local offset attached, and
+    ``utc_timestamp`` is that local time converted, one or two hours early.
+    A true time whose wall-clock reading does not exist locally (02:00 on the
+    spring change) cannot be written and is dropped, as in the real file.
+    Semicolons, decimal commas, DE and AT columns.
+    """
+    rows = []
+    for i, true_utc in enumerate(index):
+        wall = true_utc.tz_localize(None)
+        try:
+            local = wall.tz_localize("Europe/Berlin", ambiguous=True, nonexistent="raise")
+        except Exception:  # noqa: BLE001 - the nonexistent spring hour
+            continue
+        row = {
+            "utc_timestamp": local.tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "cet_cest_timestamp": local.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        }
+        for country in ("AT", "DE"):
+            for source in ("ASHP", "GSHP", "WSHP"):
+                for sink in SINKS:
+                    row[f"{country}_COP_{source}_{sink}"] = f"{value(i):.2f}".replace(
+                        ".", ","
+                    )
+        rows.append(row)
+    pd.DataFrame(rows).to_csv(path, sep=";", index=False)
     return path
 
 
@@ -53,11 +70,22 @@ def test_decimal_commas_are_read_as_numbers(tmp_path) -> None:
     assert set(cop.frame.columns) == {f"{s}_{k}" for s in ("ASHP", "GSHP") for k in SINKS}
 
 
-def test_the_missing_autumn_hour_is_filled_and_reported(tmp_path) -> None:
-    """01:00 UTC on the last Sunday of October -- missing in every year."""
-    index = _hours("2016-10-29", "2016-10-31")
-    gap = pd.Timestamp("2016-10-30 01:00", tz="UTC")
-    path = _write(tmp_path / "w.csv", index.drop(gap), value=lambda i: 3.0 + 0.05 * i)
+def test_values_are_placed_by_the_wall_clock_not_by_the_published_utc(tmp_path) -> None:
+    """The published UTC column is one hour early in winter, two in summer."""
+    index = _hours("2016-07-01 10:00", "2016-07-01 14:00")
+    path = _write(tmp_path / "w.csv", index, value=lambda i: 3.0 + 0.1 * i)
+    published = pd.read_csv(path, sep=";")["utc_timestamp"].iloc[0]
+    assert published == "2016-07-01T08:00:00Z", "the fixture reproduces the defect"
+    cop = read_cop(path, verify=False).column("ASHP", "floor")
+    assert cop.index[0] == pd.Timestamp("2016-07-01 10:00", tz="UTC")
+    assert cop.iloc[0] == pytest.approx(3.0)
+
+
+def test_the_missing_spring_hour_is_filled_and_reported(tmp_path) -> None:
+    """02:00 on the last Sunday of March -- the local hour that does not exist."""
+    index = _hours("2016-03-26", "2016-03-28")
+    gap = pd.Timestamp("2016-03-27 02:00", tz="UTC")
+    path = _write(tmp_path / "w.csv", index, value=lambda i: 3.0 + 0.05 * i)
     cop = read_cop(path, verify=False)
     assert cop.filled_utc == (gap,)
     assert cop.frame.index.equals(index)
@@ -70,12 +98,25 @@ def test_the_missing_autumn_hour_is_filled_and_reported(tmp_path) -> None:
     )
 
 
+def test_the_autumn_change_leaves_no_gap_on_the_corrected_axis(tmp_path) -> None:
+    """The gap the published axis shows in autumn is an artefact of the defect."""
+    index = _hours("2016-10-29", "2016-10-31")
+    path = _write(tmp_path / "w.csv", index)
+    published = pd.to_datetime(pd.read_csv(path, sep=";")["utc_timestamp"], utc=True)
+    assert published.diff().max() == pd.Timedelta("2h"), (
+        "the fixture reproduces the defect"
+    )
+    cop = read_cop(path, verify=False)
+    assert cop.filled_utc == ()
+    assert cop.frame.index.equals(index)
+
+
 def test_any_other_gap_is_refused(tmp_path) -> None:
     index = _hours("2016-06-01", "2016-06-03")
     path = _write(
         tmp_path / "w.csv", index.drop(pd.Timestamp("2016-06-02 12:00", tz="UTC"))
     )
-    with pytest.raises(ValueError, match="gaps other than the autumn"):
+    with pytest.raises(ValueError, match="gaps other than the spring"):
         read_cop(path, verify=False)
 
 
@@ -130,8 +171,8 @@ def test_thermal_demand_is_electrical_times_cop() -> None:
 def test_the_real_dataset_covers_the_simbench_year_after_repair() -> None:
     """The published file: checksum, one filled hour per year, plausible COP."""
     cop = read_cop(RAW)
-    assert len(cop.filled_utc) == 15  # 2008 to 2022, one autumn hour each
-    assert all(ts.month == 10 and ts.hour == 1 for ts in cop.filled_utc)
+    assert len(cop.filled_utc) == 15  # 2008 to 2022, one spring hour each
+    assert all(ts.month == 3 and ts.hour == 2 for ts in cop.filled_utc)
     year = cop.frame.loc["2015-12-31 23:00":"2016-12-31 23:00"]
     assert len(year) == 366 * 24 + 1
     # Ground source is the more efficient one on average, floor the better sink.

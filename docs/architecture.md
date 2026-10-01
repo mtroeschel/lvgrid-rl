@@ -521,7 +521,11 @@ derived thermal demand gives seasonal performance factors of 4.6 (ground) and
 3.5 (air), somewhat above field values because of the floor-heating sink, and
 480 to 1,470 full-load hours; the profiles reach rated power at times, so in
 peak hours there is no headroom to pre-heat and the flexibility lies in the
-transition seasons.
+transition seasons. when2heat's published UTC column is off by the UTC offset —
+one hour early in winter, two in summer, checked against DWD temperature — and
+is not used; the adapter reads the local wall clock as UTC (`data/README.md`).
+Annual figures are insensitive to that, the hour at which the COP is high is
+not, and that hour is what shifting a heat pump trades on.
 
 **EV charge point.** Session based: the scenario generates a sequence
 `(t_arrival, t_departure, E_demand, P_max, soc_arrival)` per charge point. Charging

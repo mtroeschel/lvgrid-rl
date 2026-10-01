@@ -78,8 +78,11 @@ under which the multiplier can only grow.
   times the integral. The scripts refuse to mix them with current (schema 2)
   files; convert by dividing overload by 3, or recompute.
 - **when2heat is fetched, not committed:** `scripts/fetch_when2heat.py` downloads
-  and verifies it. The file uses decimal commas and lacks one autumn hour per
-  year; `read_cop` handles both and refuses anything else (`data/README.md`).
+  and verifies it. The file uses decimal commas, and its `utc_timestamp` is
+  **off by the UTC offset** (1 h early in winter, 2 h in summer; checked against
+  DWD temperature, `scripts/check_when2heat_timing.py`). `read_cop` reads the
+  local wall clock as UTC instead and refuses unexpected gaps (`data/README.md`).
+  Never use `utc_timestamp` from when2heat directly.
 - **PyTorch runs with one thread** (`--torch-threads`, default 1). With the
   default pool the shared policy took 7.6 ms per decision instead of 1.0: the
   threads fall asleep during every environment step and have to be woken for

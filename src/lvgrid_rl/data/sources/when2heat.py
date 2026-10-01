@@ -20,11 +20,26 @@ a function of the buffer temperature. In stage 1 the buffer is an energy
 reservoir (architecture section 5), and its temperature does not feed back into
 the efficiency. The sink defaults to floor heating.
 
-**A defect in the data.** In every year the UTC hour 01:00 of the autumn
-daylight-saving night is missing -- the repeated local hour 02:00, presumably
-dropped when the series was built in local time. :func:`read_cop` fills exactly
-that hour by linear interpolation and refuses any other gap. It is the same
-class of trap as the SimBench time axis (``data/README.md``).
+**The published UTC column is off by the UTC offset.** The values are hourly
+reanalysis on a UTC clock, but they were written onto a *local* wall clock as if
+it were UTC and then converted to UTC properly -- so every value sits one hour
+too early in winter and two hours too early in summer. Evidence, reproducible
+with ``scripts/check_when2heat_timing.py``: cross-correlated with hourly DWD air
+temperature (six stations, UTC), the COP leads by one hour in every winter and
+by two to three hours in every summer from 2010 to 2022; read from the local
+column with its offset dropped, the lead is zero in winter (correlation 0.97)
+and zero to one hour in summer (correlation 0.3 to 0.45 -- the summer diurnal
+COP signal is weak). The same reading explains the gaps: in the published UTC
+column the hour 01:00 of every autumn change is missing, because the local
+wall clock has its repeated hour only once; on the corrected axis that hour is
+present, and instead 02:00 of every spring change is missing -- the true value
+of the local hour that does not exist.
+
+:func:`read_cop` therefore takes the timestamps from ``cet_cest_timestamp``,
+drops the offset and reads the wall clock as UTC, fills exactly the fifteen
+spring hours by linear interpolation, and refuses any other gap. Shown for the
+COP columns only; the heat demand columns, whose daily shapes come from local
+standard load profiles, are not used and not claimed either way.
 """
 
 from __future__ import annotations
@@ -79,9 +94,10 @@ class CopSeries:
 
     Args:
         frame: Columns ``"<source>_<sink>"``, e.g. ``"GSHP_floor"``; index
-            hourly in UTC without gaps.
-        filled_utc: Hours that were missing in the source and filled by
-            interpolation. Reported so that the repair stays visible.
+            hourly in UTC without gaps, on the corrected time axis.
+        filled_utc: Hours missing on the corrected axis and filled by
+            interpolation -- the spring daylight-saving hour of every year.
+            Reported so that the repair stays visible.
         country: Country code of the columns read.
     """
 
@@ -102,11 +118,11 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _is_autumn_dst_hour(ts: pd.Timestamp) -> bool:
-    """01:00 UTC on the last Sunday of October: the repeated local hour."""
-    if ts.month != 10 or ts.hour != 1 or ts.minute != 0 or ts.weekday() != 6:
+def _is_spring_dst_hour(ts: pd.Timestamp) -> bool:
+    """02:00 on the last Sunday of March: the local hour that does not exist."""
+    if ts.month != 3 or ts.hour != 2 or ts.minute != 0 or ts.weekday() != 6:
         return False
-    return (ts + pd.Timedelta(days=7)).month == 11
+    return (ts + pd.Timedelta(days=7)).month == 4
 
 
 def read_cop(
@@ -147,21 +163,31 @@ def read_cop(
         raise ValueError(f"{path} lacks columns {missing}")
     # Semicolon-separated with decimal commas, the German spreadsheet
     # convention; read without ``decimal`` every value is a string.
-    raw = pd.read_csv(path, sep=";", decimal=",", usecols=["utc_timestamp", *wanted])
+    raw = pd.read_csv(
+        path,
+        sep=";",
+        decimal=",",
+        usecols=["utc_timestamp", "cet_cest_timestamp", *wanted],
+    )
     non_numeric = [c for c in wanted if not pd.api.types.is_numeric_dtype(raw[c])]
     if non_numeric:
         raise ValueError(f"{path}: non-numeric COP columns {non_numeric}")
-    index = pd.DatetimeIndex(pd.to_datetime(raw.pop("utc_timestamp"), utc=True))
+    raw.pop("utc_timestamp")  # off by the UTC offset; see the module docstring
+    # The local wall clock, offset dropped, is the true UTC time of the value.
+    wall_clock = raw.pop("cet_cest_timestamp").str.slice(0, 19)
+    index = pd.DatetimeIndex(
+        pd.to_datetime(wall_clock, format="%Y-%m-%dT%H:%M:%S")
+    ).tz_localize("UTC")
     if index.has_duplicates:
-        raise ValueError(f"{path} has duplicate UTC timestamps")
+        raise ValueError(f"{path} has duplicate timestamps on the corrected axis")
     frame = raw.rename(columns=wanted).set_axis(index)
 
     full = pd.date_range(index[0], index[-1], freq="1h", tz="UTC")
     missing_hours = full.difference(index)
-    unexpected = [ts for ts in missing_hours if not _is_autumn_dst_hour(ts)]
+    unexpected = [ts for ts in missing_hours if not _is_spring_dst_hour(ts)]
     if unexpected:
         raise ValueError(
-            f"{path} has gaps other than the autumn daylight-saving hour, first "
+            f"{path} has gaps other than the spring daylight-saving hour, first "
             f"at {unexpected[0]}; refusing to interpolate over them"
         )
     frame = frame.reindex(full).interpolate("time")

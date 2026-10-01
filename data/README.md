@@ -47,11 +47,22 @@ COP columns are used (M4, decision D15).
 **Semicolons and decimal commas.** Read without `decimal=","`, every value is a
 string.
 
-**One hour missing every autumn.** In every year 2008 to 2022 the UTC hour 01:00
-of the last Sunday of October is absent — the repeated local hour 02:00 of the
-change back from daylight saving time, dropped when the series was built in local
-time. `lvgrid_rl.data.sources.when2heat.read_cop` fills exactly these fifteen
-hours by linear interpolation, reports them, and refuses any other gap.
+**The published `utc_timestamp` is off by the UTC offset** — one hour early in
+winter, two in summer. The values are on a UTC clock but were written onto the
+local wall clock as if it were UTC and then converted. Shown for the COP columns
+by cross-correlation with hourly DWD air temperature (six stations, UTC;
+`scripts/check_when2heat_timing.py`): on the published axis the COP leads by
+1 h in every winter and 2–3 h in every summer 2010–2022, on the corrected axis
+by 0 h in winter (r = 0.97) and 0–1 h in summer (r = 0.3–0.45, a weak diurnal
+signal). The visible symptom is a missing UTC hour 01:00 on every autumn change;
+on the corrected axis the autumn is complete and 02:00 of every spring change is
+missing instead — the true value of the local hour that does not exist.
+`lvgrid_rl.data.sources.when2heat.read_cop` reads `cet_cest_timestamp` with the
+offset dropped as UTC, fills exactly the fifteen spring hours, and refuses any
+other gap. The heat demand columns are not used and not claimed either way.
+
+DWD data for that check: Open Data of the Deutscher Wetterdienst, Datenlizenz
+Deutschland – Namensnennung – Version 2.0, stored under `data/raw/dwd/`.
 
 ## To clarify before publication
 
