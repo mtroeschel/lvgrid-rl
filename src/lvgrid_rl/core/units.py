@@ -74,6 +74,7 @@ UNIT_SUFFIXES: Final[dict[str, str]] = {
     "_min": "duration in minutes",
     # Dimensionless
     "_frac": "dimensionless fraction in the interval [0, 1]",
+    "_ratio": "dimensionless ratio, not bounded to [0, 1], e.g. a COP",
     "_count": "count (integer)",
 }
 """Permitted unit suffixes for numeric fields of schema types."""

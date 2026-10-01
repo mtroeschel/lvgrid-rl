@@ -142,6 +142,10 @@ class ExogenousInput:
         ambient_temp_degc: Ambient air temperature, input to the thermal model
             and the COP characteristic.
         ghi_wm2: Global horizontal irradiance, input to the PV potential model.
+        realized_ratio: Dimensionless exogenous quantities by key, such as the
+            coefficient of performance of a heat pump (``"cop:load:13"``). Kept
+            apart from ``realized_mw`` because they are not powers: a COP in a
+            power array would carry the wrong unit and enter power bounds.
     """
 
     t_index: int
@@ -150,6 +154,7 @@ class ExogenousInput:
     bounds_mw: np.ndarray
     ambient_temp_degc: float
     ghi_wm2: float
+    realized_ratio: Mapping[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         n = len(self.series_ids)
@@ -175,6 +180,10 @@ class ExogenousInput:
             raise ValueError(f"Realisation lies outside the bounds for: {bad}")
         object.__setattr__(self, "realized_mw", freeze_array(self.realized_mw))
         object.__setattr__(self, "bounds_mw", freeze_array(self.bounds_mw))
+        # A private copy, so that a caller keeping the dict cannot change the
+        # input afterwards; the asset models must not write to it either, which
+        # the invariant I2 test checks.
+        object.__setattr__(self, "realized_ratio", dict(self.realized_ratio))
 
     def bound_of(self, series_id: str) -> Interval:
         """Bounds of a single time series."""
