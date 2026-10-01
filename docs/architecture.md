@@ -570,6 +570,28 @@ configuration, and `evaluate.py --baselines-from` refuses to mix them.
 power is controllable between arrival and departure; energy not delivered by
 departure is booked as a penalty. V2G as a later extension, initially disabled.
 
+*Fixed for M4 (D16), replacing the emobpy plan.* emobpy 0.6.2 (December 2021)
+installs on the project's stack but fails in its first step under numpy 2 and
+pandas 3, so it could only run in a separately pinned environment. Sessions are
+instead derived the way D15 derived the heat pump demand: **arrival and energy
+from the SimBench `HLS_*` curves** — every contiguous charging block one session,
+blocks at most 15 minutes apart merged — and only the **departure from ElaadNL's
+connection-time distribution for private charging**, conditional on the hour of
+arrival. Departures are made feasible: never earlier than the energy needs at
+nominal power (25 to 37 sessions per charge point raised), never later than the
+next arrival (10 to 21 capped); both counts are reported. **Power is the nominal
+rating** of the profile, 3.7, 11 or 22 kW: `moderate_growth` multiplies the
+charge points' `p_mw` by 1.3, which turns a 22 kW wallbox into a 28.3 kW one;
+for a fixed load curve that went unnoticed, for a power limit it would be wrong,
+so the growth stays on the energy and the power is not scaled. The SimBench
+curves read as averaged expected values rather than single sessions — some 220
+blocks a year per charge point at a median of 3 to 5 kWh, and at 11 or 22 kW the
+maximum power is reached in 1 to 7 % of a block — so with overnight connection
+times small energies get long windows and the flexibility is, if anything,
+overstated. ElaadNL publishes aggregated distributions through a dashboard only;
+until its export is in place a synthetic stand-in (`synthetic_dwell`) is used and
+named as the source in every result that rests on it.
+
 ---
 
 ## 6. L3 — Gymnasium environment
@@ -1492,8 +1514,9 @@ batteries in the environment (observation, degradation term, KPIs, rule-based
 controllers that leave them idle), 4.2b is action mode 2, whose encoder is a
 design decision of its own. 4.3 the heat pump, again in two: 4.3a the when2heat
 data adapter and the thermal demand, 4.3b the model with buffer store and its
-place in the environment; 4.4 EV sessions from emobpy, calibrated against
-ElaadNL; 4.5 reference behaviour for the new assets and a survey of whether heat
+place in the environment; 4.4 EV sessions, also in two: 4.4a the sessions
+(D16, replacing the emobpy plan), 4.4b the charge point model and its place in
+the environment; 4.5 reference behaviour for the new assets and a survey of whether heat
 pump and EV load make the lower voltage limit bind; 4.6 the acceptance runs,
 preceded by a new learning-curve diagnostic because the action space grows.
 
@@ -1591,6 +1614,7 @@ finished shield, and M9 is additive.
 | D13 | evaluation split | **stratified week split with an embargo** instead of a chronological block; stress weeks and a held-out month reported separately | §6.5 |
 | D14 | action mode 2 | **weights shared per asset kind, individual setpoint per asset**, instead of a parameter vector per kind decoded by a characteristic: keeps the action space affine and invertible (I4) and so compatible with the certified arm, and matches the operational use case of a setpoint per asset | §6.3 |
 | D15 | heat pump, stage 1 | **thermal demand = SimBench electrical profile × when2heat COP** (2016, source by profile, floor sink); **modulating 30–100 % or off, with minimum run and idle times**; **buffer of two hours of rated thermal output** | §5 |
+| D16 | EV sessions | **arrival and energy from the SimBench `HLS_*` blocks, departure from ElaadNL private-charging connection times** (conditional on arrival hour), made feasible and counted; **nominal power** 3.7 / 11 / 22 kW, scenario growth on the energy only; replaces emobpy, which fails on the current stack | §5 |
 
 ### 13.1 What D2 actually costs
 

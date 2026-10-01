@@ -28,7 +28,10 @@ mode 2, decision D14: weights shared per asset kind, an individual setpoint per
 asset) is done: the per-asset observation layout and `SharedAssetPolicy`
 (`--agent-config configs/agent/ppo_shared.yaml`). 4.3, the heat pump (D15), is in
 two parts, both done: the when2heat adapter (4.3a) and the model with its place
-in the environment (4.3b, `train.py --heat-pumps`). 4.4, EV sessions, is next. **Invariant I2 is satisfied since 4.1**: asset dynamics
+in the environment (4.3b, `train.py --heat-pumps`). 4.4, EV sessions (D16), is in
+two parts: 4.4a, the sessions, is done (`data/sources/ev_sessions.py`); the
+ElaadNL export is still to be provided (`data/README.md`), until then the
+connection times are synthetic. 4.4b, the charge point model, is next. **Invariant I2 is satisfied since 4.1**: asset dynamics
 are pure functions over a frozen `AssetState`. Its test in
 `tests/test_invariants.py` is parametrised over asset types — every new asset
 model (heat pump, charge point) adds a case to `_i2_assets()`, it does not get a

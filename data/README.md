@@ -64,6 +64,31 @@ other gap. The heat demand columns are not used and not claimed either way.
 DWD data for that check: Open Data of the Deutscher Wetterdienst, Datenlizenz
 Deutschland – Namensnennung – Version 2.0, stored under `data/raw/dwd/`.
 
+## Notes on the ElaadNL data (to be provided)
+
+Decision D16 takes only one quantity from ElaadNL: how long a vehicle stays
+connected when charging **privately at home**, depending on the hour it
+arrives. ElaadNL publishes this through its open data dashboard
+(<https://elaad.nl/data/>) as aggregated distributions, with a download of the
+data behind each graph but no direct file URL, so it is exported by hand.
+
+What to export, from the private / home charging section:
+
+1. **Preferred:** the joint distribution of arrival time and connection
+   duration (a heat map or table by arrival hour), which gives the conditional
+   distribution directly.
+2. **Otherwise:** the arrival-time distribution and the connection-time
+   distribution separately. Their combination then assumes independence of the
+   two, which is wrong for home charging (evening arrivals stay overnight) and
+   is recorded as an assumption.
+
+Put the files under `data/raw/elaad/` unchanged, together with the date of the
+download and the licence shown on the platform. They are converted once into the
+intermediate CSV that `lvgrid_rl.data.sources.ev_sessions.read_dwell_csv` reads
+(`arrival_hour`, `duration_h`, `probability`); the converter is written against
+the actual export. Until then `synthetic_dwell()` stands in and is named as the
+source wherever it is used.
+
 ## To clarify before publication
 
 Whether the derived cache may be redistributed differs per source. Until that is
