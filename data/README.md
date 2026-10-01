@@ -35,6 +35,24 @@ to UTC and verifies the result.
 3.x Jacobian singular so that no low-voltage grid converges. See
 `lvgrid_rl.grid.loader.fix_zip_load_model`.
 
+## Notes on the when2heat data
+
+Version 2023-07-27, single-index CSV (about 330 MB), licence CC-BY 4.0; cite
+Ruhnau, Hirth, Praktiknjo (2019), Scientific Data 6:189. Obtain it with
+`uv run python scripts/fetch_when2heat.py`, which stores it under
+`data/raw/when2heat/` and checks its SHA-256
+(`f1f71790158d1de08403eea32dea7a2732050870c499938135606d9d7faac0fa`). Only the
+COP columns are used (M4, decision D15).
+
+**Semicolons and decimal commas.** Read without `decimal=","`, every value is a
+string.
+
+**One hour missing every autumn.** In every year 2008 to 2022 the UTC hour 01:00
+of the last Sunday of October is absent — the repeated local hour 02:00 of the
+change back from daylight saving time, dropped when the series was built in local
+time. `lvgrid_rl.data.sources.when2heat.read_cop` fills exactly these fifteen
+hours by linear interpolation, reports them, and refuses any other gap.
+
 ## To clarify before publication
 
 Whether the derived cache may be redistributed differs per source. Until that is
