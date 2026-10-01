@@ -603,7 +603,11 @@ seed**: in the 2016 run 51 of 265 full-time commuter weeks needed one (46 once,
 The retry keeps only weeks emobpy can produce — what an unlimited run would
 also deliver if it ever finished — but it is a selection, and every attempt is
 in the manifest. The state of charge carries over from week to week; every week
-starts and ends at home.
+starts and ends at home. Because the time limit depends on the machine, a run
+is reproduced with `--replay`, which takes every week's successful seed from
+its manifest and runs it without a limit. A comparison of two fresh runs found
+that the charging step was unseeded as well (emobpy draws the fast charger en
+route from numpy's global generator); it is now seeded with the week's seed.
 
 *The 2016 run* (`data/raw/emobpy/2016-home-only`, seven charge points). The
 draw gave five full-time commuters and two non-commuters — no part-time driver,

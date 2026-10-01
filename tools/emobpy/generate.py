@@ -35,6 +35,14 @@ the controllable charge point must deliver per stay.
   is what an unlimited run would also deliver if it ever finished, but it is a
   selection; every attempt is in the manifest.
 
+**Reproducing a run.** Whether a week times out depends on the machine, so a
+fresh run on another machine (or under other load) may choose other seeds for
+weeks near the limit. ``--replay <manifest>`` takes the successful seed of
+every week from an earlier manifest and runs it without a time limit; its
+output is bit-identical to the run it replays. The charging of each week is
+seeded with the week's seed as well -- emobpy draws the fast charger en route
+from numpy's global generator.
+
 The state of charge at the end of a week is the start of the next.
 """
 
@@ -98,16 +106,22 @@ def _mobility_job(driver: str, seed: int, monday: str, folder: str) -> None:
     m.save_profile(str(folder))
 
 
-def _mobility_with_retries(task: dict, timeout_s: float, max_attempts: int) -> dict:
-    """Run one week; on time-out or failure, the next seed. Returns the record."""
+def _mobility_with_retries(
+    task: dict, timeout_s: float | None, max_attempts: int
+) -> dict:
+    """Run one week; on time-out or failure, the next seed. Returns the record.
+
+    A replayed week (``task["replay_seed"]``) runs only the seed that succeeded
+    in the run it replays, without a time limit.
+    """
     attempts = []
-    for attempt in range(max_attempts):
-        seed = (
-            task["base_seed"] * 1_000_000
-            + task["cp"] * 10_000
-            + task["week"] * 100
-            + attempt
-        )
+    if task.get("replay_seed") is not None:
+        seeds = [task["replay_seed"]]
+        timeout_s = None
+    else:
+        base = task["base_seed"] * 1_000_000 + task["cp"] * 10_000 + task["week"] * 100
+        seeds = [base + attempt for attempt in range(max_attempts)]
+    for seed in seeds:
         folder = Path(task["work"]) / f"cp{task['cp']}_w{task['week']:02d}"
         shutil.rmtree(folder, ignore_errors=True)
         folder.mkdir(parents=True)
@@ -142,18 +156,23 @@ def _mobility_with_retries(task: dict, timeout_s: float, max_attempts: int) -> d
             )
             continue
         attempts.append({"seed": seed, "outcome": "ok", "seconds": round(elapsed, 1)})
-        return {**task, "folder": str(folder), "attempts": attempts}
+        return {**task, "folder": str(folder), "seed": seed, "attempts": attempts}
     raise RuntimeError(
-        f"charge point {task['cp']} week {task['week']}: "
-        f"no week after {max_attempts} attempts"
+        f"charge point {task['cp']} week {task['week']}: no week after {attempts}"
     )
 
 
 def _week_charging(
     record: dict, vehicle, power_kw: float, soc_init: float
 ) -> tuple[pd.DataFrame, float, dict]:
-    """Consumption, availability and immediate home charging for one week."""
+    """Consumption, availability and immediate home charging for one week.
+
+    Seeded with the week's mobility seed: availability draws the fast charger
+    en route from numpy's global generator.
+    """
     from emobpy import Availability, Charging, Consumption, DataBase, HeatInsulation
+
+    _seed_all(record["seed"])
 
     db = DataBase(record["folder"])
     db.loadfiles_batch(kind="driving")
@@ -217,6 +236,11 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _relative(path: Path) -> str:
+    path = path.resolve()
+    return str(path.relative_to(ROOT)) if ROOT in path.parents else str(path)
+
+
 def main() -> None:
     """Generate, then write the files and the manifest."""
     if len(sys.argv) == 3 and sys.argv[1] == "--mobility-job":
@@ -234,7 +258,14 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=max(mp.cpu_count() - 2, 1))
     parser.add_argument("--timeout", type=float, default=600.0, help="seconds per week")
     parser.add_argument("--max-attempts", type=int, default=20)
+    parser.add_argument(
+        "--replay",
+        type=Path,
+        default=None,
+        help="manifest of an earlier run: reuse its successful seeds, no time limit",
+    )
     args = parser.parse_args()
+    source = json.loads(args.replay.read_text(encoding="utf-8")) if args.replay else None
 
     import emobpy
     from emobpy import BEVspecs
@@ -260,6 +291,20 @@ def main() -> None:
         vehicle = VEHICLES[int(rng.integers(len(VEHICLES)))]
         plan.append({"cp": cp, "point": point, "driver": driver, "vehicle": vehicle})
 
+    # A replay takes, per week, the seed that succeeded and the attempts that led
+    # to it; the selection the time limit made is kept, not made again.
+    history = {}
+    if source is not None:
+        if source["base_seed"] != args.base_seed or source["weeks"] != args.weeks:
+            raise ValueError("replay: base seed or number of weeks differ")
+        entries = {e["asset_id"]: e for e in source["charge_points"]}
+        for p in plan:
+            entry = entries[p["point"]["asset_id"]]
+            if (entry["driver"], tuple(entry["vehicle"])) != (p["driver"], p["vehicle"]):
+                raise ValueError(f"replay: {entry['asset_id']} drew differently")
+            for w in entry["weeks"]:
+                history[(p["cp"], w["week"])] = w["attempts"]
+
     tasks = [
         {
             "cp": p["cp"],
@@ -268,6 +313,7 @@ def main() -> None:
             "monday": FIRST_MONDAY + timedelta(days=7 * w),
             "base_seed": args.base_seed,
             "work": str(work),
+            "replay_seed": history[(p["cp"], w)][-1]["seed"] if history else None,
         }
         for p in plan
         for w in range(args.weeks)
@@ -297,6 +343,9 @@ def main() -> None:
         },
         "base_seed": args.base_seed,
         "timeout_s": args.timeout,
+        "replay_of": None
+        if source is None
+        else {"path": _relative(args.replay), "sha256": _sha256(args.replay)},
         "first_monday": FIRST_MONDAY.isoformat(),
         "weeks": args.weeks,
         "charge_points": [],
@@ -312,9 +361,8 @@ def main() -> None:
                 record, vehicle, p["point"]["nominal_power_kw"], soc
             )
             frames.append(frame)
-            week_meta.append(
-                {"week": record["week"], "attempts": record["attempts"], **meta}
-            )
+            attempts = history.get((p["cp"], record["week"]), record["attempts"])
+            week_meta.append({"week": record["week"], "attempts": attempts, **meta})
         year = pd.concat(frames, ignore_index=True)
         path = out / f"{p['point']['asset_id'].replace(':', '_')}.parquet"
         year.to_parquet(path, index=False)

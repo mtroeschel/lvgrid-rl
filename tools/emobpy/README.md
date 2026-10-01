@@ -11,6 +11,7 @@ uv run python scripts/list_charge_points.py   # in the project root, project env
 cd tools/emobpy
 uv sync --locked
 uv run python generate.py                     # about 2.5 hours on 12 workers
+uv run python generate.py --replay ../../data/raw/emobpy/2016-home-only/manifest.json --run 2016-home-only-replay   # same seeds, bit-identical
 ```
 
 What it generates, which shares and seeds it uses, and the three workarounds
