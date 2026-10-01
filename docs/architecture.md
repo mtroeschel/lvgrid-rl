@@ -507,6 +507,26 @@ comfort band for room temperature; stage 3 SG-Ready levels as a discrete action
 space. Plus minimum run and idle times and a maximum blocking duration. Comfort
 violation is the integral of the band shortfall.
 
+*Fixed for M4 (D15).* **Thermal demand** is the SimBench electrical heat pump
+profile times the when2heat COP of the matching source (`Air_*` air-source,
+`Soil_*` ground-source; floor heating as sink), 2016 — so the grid dataset's
+energy, seasonality and daily pattern are kept, and a heat pump that ran exactly
+as SimBench says would draw exactly its profile. The COP is a time series, not a
+function of the buffer temperature (stage 1 treats the buffer as an energy
+reservoir). **Operation** is modulating between a minimum modulation of 30 % and
+rated power, or off, with minimum run and idle times; the feasible set
+{0} ∪ [P_min, P_max] is not convex, which M9 will have to handle. The **buffer**
+holds two hours of rated thermal output. On the grid's eight heat pumps the
+derived thermal demand gives seasonal performance factors of 4.6 (ground) and
+3.5 (air), somewhat above field values because of the floor-heating sink, and
+480 to 1,470 full-load hours; the profiles reach rated power at times, so in
+peak hours there is no headroom to pre-heat and the flexibility lies in the
+transition seasons. when2heat's published UTC column is off by the UTC offset —
+one hour early in winter, two in summer, checked against DWD temperature — and
+is not used; the adapter reads the local wall clock as UTC (`data/README.md`).
+Annual figures are insensitive to that, the hour at which the COP is high is
+not, and that hour is what shifting a heat pump trades on.
+
 **EV charge point.** Session based: the scenario generates a sequence
 `(t_arrival, t_departure, E_demand, P_max, soc_arrival)` per charge point. Charging
 power is controllable between arrival and departure; energy not delivered by
@@ -1432,8 +1452,9 @@ it uncovered in M3 were corrected separately. 4.1 is the battery model with the
 sharpened asset protocol and invariant I2. 4.2 is split in two: 4.2a places the
 batteries in the environment (observation, degradation term, KPIs, rule-based
 controllers that leave them idle), 4.2b is action mode 2, whose encoder is a
-design decision of its own. Then: 4.3 the
-heat pump with buffer store; 4.4 EV sessions from emobpy, calibrated against
+design decision of its own. 4.3 the heat pump, again in two: 4.3a the when2heat
+data adapter and the thermal demand, 4.3b the model with buffer store and its
+place in the environment; 4.4 EV sessions from emobpy, calibrated against
 ElaadNL; 4.5 reference behaviour for the new assets and a survey of whether heat
 pump and EV load make the lower voltage limit bind; 4.6 the acceptance runs,
 preceded by a new learning-curve diagnostic because the action space grows.
@@ -1531,6 +1552,7 @@ finished shield, and M9 is additive.
 | D12 | language | English throughout, including error messages | `CONTRIBUTING.md` |
 | D13 | evaluation split | **stratified week split with an embargo** instead of a chronological block; stress weeks and a held-out month reported separately | §6.5 |
 | D14 | action mode 2 | **weights shared per asset kind, individual setpoint per asset**, instead of a parameter vector per kind decoded by a characteristic: keeps the action space affine and invertible (I4) and so compatible with the certified arm, and matches the operational use case of a setpoint per asset | §6.3 |
+| D15 | heat pump, stage 1 | **thermal demand = SimBench electrical profile × when2heat COP** (2016, source by profile, floor sink); **modulating 30–100 % or off, with minimum run and idle times**; **buffer of two hours of rated thermal output** | §5 |
 
 ### 13.1 What D2 actually costs
 
