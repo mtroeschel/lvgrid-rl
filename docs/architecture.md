@@ -544,6 +544,27 @@ thermostat, `default_action` (hysteresis at 40 and 90 % fill). Starting values,
 not calibrated: 20 min minimum run and idle time, 120 min maximum blocking, 20 K
 band, standing loss set by the environment.
 
+*In the environment (`make_env(heat_pumps=...)`, `train.py --heat-pumps`).* Each
+of the grid's eight heat pump loads (33.5 kW) becomes a `HeatPump` at its load
+element; its SimBench profile no longer drives the grid. Buffer capacity is two
+hours of rated heat at the pump's seasonal performance factor, the standing loss
+0.5 % of it per hour (a buffer of this size, around 1,000 l, loses about
+3 kWh a day). The repaired COP is cached (`data/cache/`), so building an
+environment does not re-read the 330 MB file. Rule-based controllers and
+`do_nothing` leave heat pumps on their thermostats (`ActionMapper.default_physical`);
+the comfort term `hp_comfort` (−2 per Kh, the starting value of §6.4) enters
+the reward, comfort deviation, unserved heat and compressor switches the KPIs.
+
+*Measured.* Run alone over 2016, the thermostats draw 5 to 17 % more electricity
+than the SimBench profiles — for ground-source pumps almost exactly the buffer's
+standing loss — at an hourly correlation of 0.61 to 0.66 with them, without a
+comfort violation, at about three starts a day. On the grid the difference
+barely shows: `do_nothing` on the nine test weeks gives pass rate 0.9145 and 141
+K95 windows either way and an overload of 121.15 against 121.90 (−0.6 %). The
+uncontrolled grid with controllable heat pumps is therefore not the M3 one, but
+its KPIs are within a percent of it; baselines are still recomputed per asset
+configuration, and `evaluate.py --baselines-from` refuses to mix them.
+
 **EV charge point.** Session based: the scenario generates a sequence
 `(t_arrival, t_departure, E_demand, P_max, soc_arrival)` per charge point. Charging
 power is controllable between arrival and departure; energy not delivered by

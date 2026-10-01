@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 
 from lvgrid_rl.components.bess import BatteryStorage
+from lvgrid_rl.components.heat_pump import HeatPump
 from lvgrid_rl.components.pv import PvMode, PvSystem
 from lvgrid_rl.core.schemas import AssetRatings, Interval
 from lvgrid_rl.data.sources.simbench import AssetCategory, categorize
@@ -23,7 +24,14 @@ from lvgrid_rl.env.splits import WeekSplit
 from lvgrid_rl.grid.loader import GridModel, load_grid
 from lvgrid_rl.grid.scenario import SCENARIO_LIBRARY
 
-__all__ = ["StorageSizing", "DEFAULT_STORAGE", "make_env", "absolute_profiles"]
+__all__ = [
+    "StorageSizing",
+    "DEFAULT_STORAGE",
+    "HeatPumpSizing",
+    "DEFAULT_HEAT_PUMPS",
+    "make_env",
+    "absolute_profiles",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +75,100 @@ class StorageSizing:
 
 DEFAULT_STORAGE = StorageSizing()
 """1 kW and 2 kWh per kWp of PV, the M4 working configuration."""
+
+
+@dataclass(frozen=True, slots=True)
+class HeatPumpSizing:
+    """How the grid's heat pumps become controllable (M4, D15).
+
+    Every load with a SimBench heat pump profile is replaced by a
+    :class:`HeatPump` at the same element. Its thermal demand is the SimBench
+    electrical profile times the when2heat COP of its heat source; its buffer
+    holds ``buffer_hours`` of rated thermal output, rated thermal output being
+    the electrical rating times the heat pump's seasonal performance factor
+    over the year.
+
+    Args:
+        buffer_hours: Buffer capacity in hours of rated thermal output.
+        sink: when2heat heat sink for the COP.
+        standing_loss_frac_per_h: Buffer heat loss per hour, as a share of its
+            capacity. 0.5 %: a buffer of this size (two hours of rated heat is
+            on the order of 1,000 litres over a 20 K band) loses about 3 kWh a
+            day, which is 0.5 % of its band capacity per hour.
+        evaluation_buffer_frac: Fill level at the start of every evaluation week.
+        when2heat_csv: The raw when2heat file, for the first call; afterwards
+            the cache is used.
+        cache_dir: Where the repaired COP is cached.
+    """
+
+    buffer_hours: float = 2.0
+    sink: str = "floor"
+    standing_loss_frac_per_h: float = 0.005
+    evaluation_buffer_frac: float = 0.5
+    when2heat_csv: str = "data/raw/when2heat/when2heat-2023-07-27.csv"
+    cache_dir: str = "data/cache"
+
+    def __post_init__(self) -> None:
+        if self.buffer_hours <= 0.0:
+            raise ValueError("buffer_hours must be positive")
+
+
+DEFAULT_HEAT_PUMPS = HeatPumpSizing()
+"""Two hours of rated heat, floor sink, the M4 working configuration (D15)."""
+
+
+def _heat_pumps(model: GridModel, frame, sizing: HeatPumpSizing, evaluate: bool):
+    """Heat pump models, their thermal demand columns and their COP series.
+
+    Returns:
+        ``(assets, demand_columns, cop_series)``: the models; a mapping from
+        ``"heat:<asset_id>"`` to the thermal demand in MW; a mapping from
+        ``"cop:<asset_id>"`` to the COP on the simulation index.
+    """
+    from lvgrid_rl.data.sources.when2heat import (
+        cached_cop,
+        cop_on_index,
+        heat_source_of,
+        thermal_demand_mw,
+    )
+
+    cop = cached_cop(sizing.when2heat_csv, sizing.cache_dir)
+    band = (
+        Interval(sizing.evaluation_buffer_frac, sizing.evaluation_buffer_frac)
+        if evaluate
+        else None
+    )
+    assets, demand, ratios = [], {}, {}
+    for position, element_index in enumerate(model.net.load.index):
+        row = model.net.load.iloc[position]
+        profile = str(row.get("profile", "") or "")
+        if categorize(profile) is not AssetCategory.HEAT_PUMP:
+            continue
+        asset_id = f"load:{element_index}"
+        electrical = frame[asset_id]
+        series = cop_on_index(
+            cop.column(heat_source_of(profile), sizing.sink), frame.index
+        )
+        thermal = thermal_demand_mw(electrical, series)
+        rated = float(row["p_mw"])
+        spf = float(thermal.sum() / electrical.sum()) if electrical.sum() > 0 else 3.0
+        capacity = sizing.buffer_hours * rated * spf
+        heat_key, cop_key = f"heat:{asset_id}", f"cop:{asset_id}"
+        demand[heat_key] = thermal.to_numpy()
+        ratios[cop_key] = series.to_numpy()
+        assets.append(
+            HeatPump(
+                asset_id=asset_id,
+                bus=int(row["bus"]),
+                ratings=AssetRatings(p_min_mw=0.0, p_max_mw=rated),
+                series_id=heat_key,
+                cop_key=cop_key,
+                capacity_mwh=capacity,
+                standing_loss_mw=sizing.standing_loss_frac_per_h * capacity,
+                initial_buffer_frac=band,
+            )
+        )
+    return assets, demand, ratios
 
 
 def _add_storage(
@@ -166,6 +268,7 @@ def make_env(
     pv_mode: str = "p_only",
     seed: int | None = None,
     storage: StorageSizing | None = None,
+    heat_pumps: HeatPumpSizing | None = None,
 ) -> LVGridEnv:
     """Build an environment for one grid, scenario and evaluation set.
 
@@ -182,6 +285,8 @@ def make_env(
         seed: Base seed of the environment.
         storage: Controllable batteries at the PV buses, or ``None`` for PV
             curtailment alone -- the M3 setup.
+        heat_pumps: Make the grid's heat pumps controllable, or ``None`` to
+            leave them on their SimBench profiles as uncontrolled load.
     """
     config = config or EnvConfig()
     timebase = TimeBase(config.sim_dt_min, config.control_dt_min)
@@ -210,13 +315,28 @@ def make_env(
             )
         )
 
+    evaluate = episode_spec is not None and episode_spec.mode is EpisodeMode.EVALUATE
+    ratio_series: dict[str, np.ndarray] = {}
+    if heat_pumps is not None:
+        pumps, demand, ratio_series = _heat_pumps(model, frame, heat_pumps, evaluate)
+        assets += pumps
+        # Thermal demand travels as a profile series, so that it reaches the
+        # heat pump through the exogenous input and the forecast like any other
+        # profile (I3). It is not a grid element and is never written to one.
+        for key, values in demand.items():
+            frame[key] = values
+
     controlled = {a.asset_id for a in assets}
     uncontrolled = {
-        name: frame[name].to_numpy() for name in frame.columns if name not in controlled
+        name: frame[name].to_numpy()
+        for name in frame.columns
+        if name not in controlled and not name.startswith("heat:")
     }
     if storage is not None:
-        evaluate = episode_spec is not None and episode_spec.mode is EpisodeMode.EVALUATE
-        assets += _add_storage(model, list(assets), storage, evaluate)
+        # One battery per PV system -- and only per PV system: the list holds
+        # heat pumps too when they are controllable.
+        pv = [a for a in assets if a.kind == "pv"]
+        assets += _add_storage(model, pv, storage, evaluate)
 
     split = WeekSplit.from_json(Path(split_path).read_text(encoding="utf-8"))
     sampler = EpisodeSampler(
@@ -241,4 +361,5 @@ def make_env(
         sampler=sampler,
         config=config,
         seed=seed,
+        ratio_series=ratio_series,
     )

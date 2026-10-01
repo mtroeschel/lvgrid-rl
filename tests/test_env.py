@@ -190,6 +190,7 @@ def test_terms_are_reported_individually() -> None:
     assert set(result.terms) == {
         "pv_curtailment",
         "bess_degradation",
+        "hp_comfort",
         "action_smoothness",
         "grid_losses",
         "en50160_k95",

@@ -56,6 +56,12 @@ class EpisodeResult:
     """Conversion and standing losses inside the assets."""
     clipping_counts: Mapping[str, int] = field(default_factory=dict)
     """Limitations by cause, counted per asset and control step."""
+    hp_comfort_kh: float = 0.0
+    """Temperature below the heat pump buffer bands, integrated, summed."""
+    hp_unserved_heat_mwh: float = 0.0
+    """Heat demand no buffer could serve."""
+    hp_switches: int = 0
+    """Compressor switching events, on and off, summed over heat pumps."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,6 +114,9 @@ class RunResult:
             "clipped_steps": self.total("clipped_steps"),
             "storage_throughput_mwh": self.total("storage_throughput_mwh"),
             "asset_loss_mwh": self.total("asset_loss_mwh"),
+            "hp_comfort_kh": self.total("hp_comfort_kh"),
+            "hp_unserved_heat_mwh": self.total("hp_unserved_heat_mwh"),
+            "hp_switches": self.total("hp_switches"),
             **{
                 f"clipping/{key}": float(
                     sum(e.clipping_counts.get(key, 0) for e in self.episodes)
@@ -178,6 +187,9 @@ def run_controller(
         clipped = 0
         throughput = 0.0
         asset_loss = 0.0
+        comfort = 0.0
+        unserved_heat = 0.0
+        switches = 0
         clipping: dict[str, int] = {}
         decision_ns = 0
         steps = 0
@@ -200,6 +212,9 @@ def run_controller(
             clipped += int(step_info["action_clipped"])
             throughput += step_info.get("storage_throughput_mwh", 0.0)
             asset_loss += step_info.get("asset_loss_mwh", 0.0)
+            comfort += step_info.get("hp_comfort_kh", 0.0)
+            unserved_heat += step_info.get("hp_unserved_heat_mwh", 0.0)
+            switches += int(step_info.get("hp_switches", 0))
             for key, value in step_info.items():
                 if key.startswith("clipping/"):
                     cause = key.removeprefix("clipping/")
@@ -235,6 +250,9 @@ def run_controller(
                 storage_throughput_mwh=throughput,
                 asset_loss_mwh=asset_loss,
                 clipping_counts=clipping,
+                hp_comfort_kh=comfort,
+                hp_unserved_heat_mwh=unserved_heat,
+                hp_switches=switches,
             )
         )
 
