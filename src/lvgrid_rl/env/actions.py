@@ -51,6 +51,9 @@ class ActionMapper:
     specs: tuple[ActionSpec, ...]
     kinds: tuple[str, ...] | None = None
     """Asset type per asset, same order; ``None`` for hand-built mappers."""
+    assets: tuple | None = None
+    """The assets themselves, for those whose idle behaviour is a controller of
+    their own (``default_action``); ``None`` for hand-built mappers."""
 
     def __post_init__(self) -> None:
         if len(self.asset_ids) != len(self.specs):
@@ -67,7 +70,35 @@ class ActionMapper:
             asset_ids=tuple(a.asset_id for a in assets),
             specs=tuple(a.action_spec() for a in assets),
             kinds=tuple(a.kind for a in assets),
+            assets=tuple(assets),
         )
+
+    def default_physical(self, info=None) -> np.ndarray:
+        """What every asset does when nobody intervenes, in physical units.
+
+        The static :attr:`neutral` for assets whose idle behaviour is a fixed
+        value; the asset's own controller (``default_action``) for the others --
+        a heat pump left alone follows its thermostat, it does not switch off.
+
+        Raises:
+            ValueError: if an asset has a controller of its own and no
+                information set is given, since its default depends on state.
+        """
+        out = self.neutral.copy()
+        if self.assets is None:
+            return out
+        cursor = 0
+        for asset, spec in zip(self.assets, self.specs, strict=True):
+            if hasattr(asset, "default_action"):
+                if info is None:
+                    raise ValueError(
+                        f"{asset.asset_id} has a controller of its own; its default "
+                        "depends on state, so pass the information set"
+                    )
+                state = info.asset_states[asset.asset_id]
+                out[cursor : cursor + spec.dim] = asset.default_action(state, info)
+            cursor += spec.dim
+        return out
 
     def component_mask(self, kind: str, name: str) -> np.ndarray:
         """Boolean mask over the flat vector: components ``name`` of ``kind``.
@@ -171,7 +202,7 @@ class ActionMapper:
             cursor += spec.dim
         return out
 
-    def neutral_action(self) -> np.ndarray:
+    def neutral_action(self, info=None) -> np.ndarray:
         """Normalised action that intervenes nowhere.
 
         For a PV system the upper bound is zero infeed, so ``+1`` would mean full
@@ -179,6 +210,7 @@ class ActionMapper:
         discharge and the neutral action is the middle. The values come from
         each asset's :attr:`ActionSpec.neutral`, not from a bound: until M4 this
         returned the lower bound for every component, which was right only for
-        PV active power.
+        PV active power. Assets with a controller of their own contribute its
+        action, which needs ``info`` (:meth:`default_physical`).
         """
-        return self.to_normalised(self.neutral)
+        return self.to_normalised(self.default_physical(info))

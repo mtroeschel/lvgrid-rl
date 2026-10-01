@@ -65,6 +65,10 @@ class RewardConfig:
             # 0.2, is the architecture's starting value (section 6.4), not a
             # calibrated cost; zero throughput leaves the M3 reward unchanged.
             "bess_degradation": TermSpec(weight=-0.2),
+            # Per kelvin-hour below the buffer's band, summed over heat pumps.
+            # The architecture's starting value (section 6.4): one Kh weighs as
+            # much as two MWh of curtailment, which is heavy, and not calibrated.
+            "hp_comfort": TermSpec(weight=-2.0),
             "action_smoothness": TermSpec(weight=-0.05),
             "grid_losses": TermSpec(weight=-0.1),
         }
@@ -170,6 +174,7 @@ class RewardComposer:
         k95_beyond_budget_worst_bus_this_step: int,
         windows_per_step: float,
         storage_throughput_mwh: float,
+        hp_comfort_kh: float = 0.0,
     ) -> RewardBreakdown:
         """Evaluate the reward for one control step.
 
@@ -197,6 +202,8 @@ class RewardComposer:
                 ``control_dt / 10 min`` -- 1.5 at a 15-minute control step.
             storage_throughput_mwh: Energy through the battery terminals,
                 charging and discharging, for the degradation term.
+            hp_comfort_kh: Temperature below the buffer bands, integrated over
+                the step and summed over heat pumps.
 
         **What the costs mean.** The voltage costs are *rates*: the violating
         windows at the worst bus of the step, divided by the windows a step
@@ -234,6 +241,7 @@ class RewardComposer:
         objective = {
             "pv_curtailment": curtailed_energy_mwh,
             "bess_degradation": storage_throughput_mwh,
+            "hp_comfort": hp_comfort_kh,
             "action_smoothness": float(setpoint_change_mw),
             "grid_losses": metrics.losses_mw * dt_hours,
         }

@@ -91,6 +91,7 @@ class AssetFeatureSpec:
         capacity_mwh: Battery capacity.
         colocated_series: PV profiles at the same bus. What a battery beside a
             PV system most needs to know is how much that system will produce.
+        cop_key: Forecast key of a heat pump's COP.
     """
 
     asset_id: str
@@ -100,6 +101,7 @@ class AssetFeatureSpec:
     series_id: str | None = None
     capacity_mwh: float | None = None
     colocated_series: tuple[str, ...] = ()
+    cop_key: str | None = None
 
     def __post_init__(self) -> None:
         if self.rated_p_mw <= 0.0:
@@ -123,11 +125,25 @@ ASSET_FEATURES: dict[str, tuple[str, ...]] = {
         "energy_to_power",
         "colocated_pv_forecast",
     ),
+    "hp": (
+        "vm_local",
+        "rated_p",
+        "last_p",
+        "buffer_frac",
+        "running",
+        "heat_forecast",
+        "cop_forecast",
+    ),
 }
 """Feature names per asset kind. ``forecast`` and ``colocated_pv_forecast``
 expand to one entry per forecast step; every other name is one entry."""
 
-_EXPANDING = frozenset({"forecast", "colocated_pv_forecast"})
+_EXPANDING = frozenset(
+    {"forecast", "colocated_pv_forecast", "heat_forecast", "cop_forecast"}
+)
+
+COP_SCALE = 5.0
+"""COPs are divided by this, so a typical value reads around 0.7."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +198,9 @@ class ObservationSpec:
         storage_assets: ``(asset_id, capacity_mwh)`` per battery, whose state
             of charge forms the ``asset_state`` group. Empty without batteries,
             which leaves the M3 observation unchanged.
+        thermal_assets: ``(asset_id, capacity_mwh, cop_key)`` per heat pump:
+            buffer fill level, whether it runs, and the current COP join the
+            ``asset_state`` group. Empty without heat pumps.
         layout: ``flat`` (default, the M3 layout) or ``per_asset``.
         assets: Per-asset feature specifications, in action order. Filled in
             by the environment when left empty; a builder needs them for
@@ -203,6 +222,7 @@ class ObservationSpec:
     voltage_scale: float = 0.10
     power_scale_mw: float = 0.1
     storage_assets: tuple[tuple[str, float], ...] = ()
+    thermal_assets: tuple[tuple[str, float, str], ...] = ()
     layout: ObservationLayoutMode = ObservationLayoutMode.FLAT
     assets: tuple[AssetFeatureSpec, ...] = ()
 
@@ -317,6 +337,10 @@ class ObservationBuilder:
         if group is FeatureGroup.ASSET_STATE:
             return [
                 f"asset/{asset_id}/soc_frac" for asset_id, _ in self.spec.storage_assets
+            ] + [
+                f"asset/{asset_id}/{name}"
+                for asset_id, _, _ in self.spec.thermal_assets
+                for name in ("buffer_frac", "running", "cop")
             ]
         if group is FeatureGroup.PQ_BUDGET:
             return [
@@ -399,6 +423,16 @@ class ObservationBuilder:
             elif name == "energy_to_power":
                 # Hours of full power, as a share of a day: 2 h reads 0.083.
                 values.append(asset.capacity_mwh / asset.rated_p_mw / 24.0)
+            elif name == "buffer_frac":
+                values.append(own.energy_mwh / asset.capacity_mwh)
+            elif name == "running":
+                values.append(1.0 if own.running else 0.0)
+            elif name == "heat_forecast":
+                series = np.asarray(info.forecast[asset.series_id][:horizon])
+                values.extend((series / asset.rated_p_mw).tolist())
+            elif name == "cop_forecast":
+                series = np.asarray(info.forecast[asset.cop_key][:horizon])
+                values.extend((series / COP_SCALE).tolist())
             elif name == "colocated_pv_forecast":
                 total = np.zeros(horizon)
                 for series in asset.colocated_series:
@@ -450,13 +484,20 @@ class ObservationBuilder:
             # Without the state of charge a battery policy is not Markovian: the
             # same grid state asks for charging or discharging depending on how
             # full the battery already is. A fraction needs no further scale.
-            return np.array(
-                [
-                    state.assets[asset_id].energy_mwh / capacity_mwh
-                    for asset_id, capacity_mwh in self.spec.storage_assets
-                ],
-                dtype=np.float64,
-            )
+            # The same holds for a heat pump's buffer, and its minimum run and
+            # idle times make whether it is running part of the state too.
+            values = [
+                state.assets[asset_id].energy_mwh / capacity_mwh
+                for asset_id, capacity_mwh in self.spec.storage_assets
+            ]
+            for asset_id, capacity_mwh, cop_key in self.spec.thermal_assets:
+                own = state.assets[asset_id]
+                values += [
+                    own.energy_mwh / capacity_mwh,
+                    1.0 if own.running else 0.0,
+                    float(info.forecast[cop_key][0]) / COP_SCALE,
+                ]
+            return np.array(values, dtype=np.float64)
 
         if group is FeatureGroup.PQ_BUDGET:
             # Without this group the control problem is not Markovian: the agent

@@ -27,8 +27,8 @@ plus action mode 2 (per asset type). The steps are in `docs/architecture.md`
 mode 2, decision D14: weights shared per asset kind, an individual setpoint per
 asset) is done: the per-asset observation layout and `SharedAssetPolicy`
 (`--agent-config configs/agent/ppo_shared.yaml`). 4.3, the heat pump (D15), is in
-two parts: 4.3a, the when2heat adapter, is done; of 4.3b the model is done
-(`components/heat_pump.py`, an I2 case), its place in the environment is next. **Invariant I2 is satisfied since 4.1**: asset dynamics
+two parts, both done: the when2heat adapter (4.3a) and the model with its place
+in the environment (4.3b, `train.py --heat-pumps`). 4.4, EV sessions, is next. **Invariant I2 is satisfied since 4.1**: asset dynamics
 are pure functions over a frozen `AssetState`. Its test in
 `tests/test_invariants.py` is parametrised over asset types — every new asset
 model (heat pump, charge point) adds a case to `_i2_assets()`, it does not get a

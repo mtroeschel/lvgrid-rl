@@ -27,7 +27,13 @@ from lvgrid_rl.agents.policy_controller import PolicyController
 from lvgrid_rl.baselines.methods import DoNothing, FixedCap, PUDroop, asset_bus_positions
 from lvgrid_rl.data.timebase import TimeBase
 from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
-from lvgrid_rl.env.factory import DEFAULT_STORAGE, StorageSizing, make_env
+from lvgrid_rl.env.factory import (
+    DEFAULT_HEAT_PUMPS,
+    DEFAULT_STORAGE,
+    HeatPumpSizing,
+    StorageSizing,
+    make_env,
+)
 from lvgrid_rl.env.lv_grid_env import EnvConfig
 from lvgrid_rl.env.obs import ObservationLayoutMode, ObservationSpec
 from lvgrid_rl.env.reward import RewardConfig, RewardMode
@@ -116,6 +122,13 @@ def build_parser() -> argparse.ArgumentParser:
         "in M3",
     )
     parser.add_argument(
+        "--heat-pumps",
+        action="store_true",
+        help="make the grid's heat pumps controllable, with buffer stores and "
+        "when2heat COP (decision D15); without it they follow their SimBench "
+        "profiles as uncontrolled load",
+    )
+    parser.add_argument(
         "--reward-mode",
         default=RewardMode.FIXED_WEIGHTS.value,
         choices=[m.value for m in RewardMode],
@@ -188,6 +201,7 @@ def main() -> None:
     torch.set_num_threads(args.torch_threads)
     reward_mode = RewardMode(args.reward_mode)
     storage: StorageSizing | None = DEFAULT_STORAGE if args.storage else None
+    heat_pumps: HeatPumpSizing | None = DEFAULT_HEAT_PUMPS if args.heat_pumps else None
     spec = AgentSpec.from_yaml(args.agent_config)
     if args.n_steps is not None:
         spec = replace(spec, hyperparams={**spec.hyperparams, "n_steps": args.n_steps})
@@ -219,6 +233,7 @@ def main() -> None:
                 episode_spec=train_spec,
                 seed=int(seeds.worker_generator("train", index).integers(2**31)),
                 storage=storage,
+                heat_pumps=heat_pumps,
             )
 
         return factory
@@ -238,6 +253,7 @@ def main() -> None:
             "eval_set": args.eval_set,
             "reward_mode": reward_mode.value,
             "storage": asdict(storage) if storage is not None else None,
+            "heat_pumps": asdict(heat_pumps) if heat_pumps is not None else None,
             "obs_layout": obs_layout.value,
             "torch_threads": args.torch_threads,
             # Part of the hashed configuration: the dual settings decide the
@@ -265,6 +281,7 @@ def main() -> None:
         json.dumps(
             {
                 "storage": asdict(storage) if storage is not None else None,
+                "heat_pumps": asdict(heat_pumps) if heat_pumps is not None else None,
                 "obs_layout": obs_layout.value,
             },
             indent=2,
@@ -331,6 +348,7 @@ def main() -> None:
             scenario=args.scenario,
             set_name=args.eval_set,
             storage=storage,
+            heat_pumps=heat_pumps,
         )
     )
 
@@ -356,6 +374,7 @@ def main() -> None:
             episode_spec=eval_spec,
             seed=seeds.eval,
             storage=storage,
+            heat_pumps=heat_pumps,
         )
         # n_episodes defaults to one per week in the set, which is the
         # standard-conforming choice.

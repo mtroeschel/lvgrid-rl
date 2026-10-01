@@ -133,6 +133,7 @@ class LVGridEnv(gym.Env):
         config: EnvConfig | None = None,
         safety: SafetyComponent | None = None,
         seed: int | None = None,
+        ratio_series: Mapping[str, np.ndarray] | None = None,
     ) -> None:
         self.model = model
         self.assets = tuple(assets)
@@ -146,6 +147,11 @@ class LVGridEnv(gym.Env):
         # without rebuilding the profile frame.
         self._profiles_index = profiles_index
         self._uncontrolled = dict(uncontrolled)
+        # Dimensionless exogenous series -- the COP of each heat pump -- kept
+        # apart from the power profiles, see ExogenousInput.realized_ratio.
+        self._ratio_series = {
+            k: np.asarray(v, dtype=np.float64) for k, v in (ratio_series or {}).items()
+        }
 
         self.engine = PandapowerEngine(model)
         self.mapper = ActionMapper.from_assets(self.assets)
@@ -163,6 +169,15 @@ class LVGridEnv(gym.Env):
                 forecast_horizon=self.config.forecast_horizon,
                 forecast_series=tuple(
                     a.series_id for a in self.assets if hasattr(a, "series_id")
+                ),
+            )
+        if not observation_spec.thermal_assets:
+            observation_spec = replace(
+                observation_spec,
+                thermal_assets=tuple(
+                    (a.asset_id, a.capacity_mwh, a.cop_key)
+                    for a in self.assets
+                    if a.kind == "hp"
                 ),
             )
         if not observation_spec.storage_assets:
@@ -228,6 +243,7 @@ class LVGridEnv(gym.Env):
                     colocated_series=tuple(pv_at_bus.get(asset.bus, ()))
                     if asset.kind == "bess"
                     else (),
+                    cop_key=getattr(asset, "cop_key", None),
                 )
             )
         return tuple(specs)
@@ -287,6 +303,7 @@ class LVGridEnv(gym.Env):
             bounds_mw=bounds,
             ambient_temp_degc=0.0,
             ghi_wm2=0.0,
+            realized_ratio={k: float(v[t]) for k, v in self._ratio_series.items()},
         )
 
     def _forecast(self, t: int) -> dict[str, np.ndarray]:
@@ -304,6 +321,11 @@ class LVGridEnv(gym.Env):
             if len(window) < horizon:
                 window = np.pad(window, (0, horizon - len(window)), mode="edge")
             out[series] = window
+        for key, values in self._ratio_series.items():
+            window = values[t:end]
+            if len(window) < horizon:
+                window = np.pad(window, (0, horizon - len(window)), mode="edge")
+            out[key] = window
         return out
 
     def _information_set(self, t: int, grid: GridState) -> InformationSet:
@@ -459,6 +481,9 @@ class LVGridEnv(gym.Env):
         physics_limited: set[tuple[str, str]] = set()
         throughput_mwh = 0.0
         asset_loss_mwh = 0.0
+        comfort_kh = 0.0
+        unserved_heat_mwh = 0.0
+        hp_switches = 0
         inner_steps = 0
 
         for _ in range(self.steps_per_control):
@@ -512,6 +537,10 @@ class LVGridEnv(gym.Env):
                 if asset.kind == "bess":
                     throughput_mwh += outcome.throughput_energy_mwh
                 asset_loss_mwh += outcome.loss_energy_mwh
+                if asset.kind == "hp":
+                    comfort_kh += outcome.comfort_deviation_kh
+                    unserved_heat_mwh += outcome.unserved_energy_mwh
+                    hp_switches += outcome.switching_count
                 for key in applied[asset.asset_id].clipping_info:
                     if key not in controlled[asset.asset_id].clipping_info:
                         physics_limited.add((asset.asset_id, f"{asset.kind}/{key}"))
@@ -565,6 +594,7 @@ class LVGridEnv(gym.Env):
             ),
             windows_per_step=self.config.control_dt_min / 10,
             storage_throughput_mwh=throughput_mwh,
+            hp_comfort_kh=comfort_kh,
         )
         reward_total = step_reward.total
         breakdown_terms = dict(step_reward.terms)
@@ -610,6 +640,9 @@ class LVGridEnv(gym.Env):
             "curtailed_energy_mwh": totals["curtailed_energy_mwh"],
             "storage_throughput_mwh": throughput_mwh,
             "asset_loss_mwh": asset_loss_mwh,
+            "hp_comfort_kh": comfort_kh,
+            "hp_unserved_heat_mwh": unserved_heat_mwh,
+            "hp_switches": hp_switches,
         }
         # A limitation applied by the physics inside the hold (the battery
         # management cut-off) counts once per asset and control step, like one

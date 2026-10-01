@@ -51,6 +51,8 @@ from pathlib import Path
 import pandas as pd
 
 __all__ = [
+    "DEFAULT_RAW_PATH",
+    "cached_cop",
     "WHEN2HEAT_VERSION",
     "WHEN2HEAT_SHA256",
     "WHEN2HEAT_URL",
@@ -70,6 +72,8 @@ WHEN2HEAT_SHA256 = "f1f71790158d1de08403eea32dea7a2732050870c499938135606d9d7faa
 """Of the single-index CSV of the version above, as downloaded on 2026-10-01."""
 
 SINKS = ("floor", "radiator", "water")
+
+DEFAULT_RAW_PATH = Path(f"data/raw/when2heat/when2heat-{WHEN2HEAT_VERSION}.csv")
 _SOURCES = ("ASHP", "GSHP")
 
 
@@ -223,3 +227,54 @@ def thermal_demand_mw(electrical_mw: pd.Series, cop: pd.Series) -> pd.Series:
     if (electrical_mw < -1e-12).any():
         raise ValueError("a heat pump profile must not feed in")
     return electrical_mw.clip(lower=0.0) * cop
+
+
+def cached_cop(
+    raw_path: Path | str = DEFAULT_RAW_PATH,
+    cache_dir: Path | str = Path("data/cache"),
+    country: str = "DE",
+) -> CopSeries:
+    """:func:`read_cop`, through the profile cache.
+
+    Reading and verifying the 330 MB file takes seconds, and an environment is
+    built once per training worker and once per evaluation. The repaired hourly
+    frame is cached as Parquet under a key that names the dataset version and
+    country, with the content hash in the manifest; the first call reads and
+    verifies the raw file, every later one loads the cache and checks its hash.
+
+    Raises:
+        FileNotFoundError: if neither cache nor raw file exists, with the
+            command that fetches the data.
+    """
+    from lvgrid_rl.data.cache import CacheKey, ProfileCache
+
+    key = CacheKey(
+        source="when2heat",
+        source_version=WHEN2HEAT_VERSION,
+        dataset=f"{country}-cop-wallclock",
+        sim_dt_min=60,
+    )
+    cache = ProfileCache(Path(cache_dir))
+    if cache.has(key):
+        frame, manifest = cache.load(key)
+        filled = tuple(
+            pd.Timestamp(ts)
+            for ts in manifest.notes.split("filled: ", 1)[-1].split(", ")
+            if ts
+        )
+        return CopSeries(frame=frame, filled_utc=filled, country=country)
+    raw_path = Path(raw_path)
+    if not raw_path.exists():
+        raise FileNotFoundError(
+            f"when2heat data not found at {raw_path}. Fetch it with\n"
+            "    uv run python scripts/fetch_when2heat.py"
+        )
+    cop = read_cop(raw_path, country=country)
+    cache.store(
+        key,
+        cop.frame,
+        notes="Time axis from the local wall clock read as UTC (the published "
+        "utc_timestamp is off by the UTC offset); spring daylight-saving hours "
+        "filled: " + ", ".join(str(ts) for ts in cop.filled_utc),
+    )
+    return cop

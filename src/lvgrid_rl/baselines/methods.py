@@ -53,8 +53,11 @@ class DoNothing:
         """Nothing to reset."""
 
     def act(self, info: InformationSet) -> np.ndarray:
-        """Always full infeed."""
-        return self.mapper.neutral_action()
+        """No intervention.
+
+        Full PV infeed, idle batteries, heat pumps on their own thermostats.
+        """
+        return self.mapper.neutral_action(info)
 
 
 @dataclass
@@ -106,7 +109,7 @@ class FixedCap:
 
         Every other asset stays at its neutral setpoint -- a battery idles.
         """
-        physical = _pv_rule(self.mapper, self.mapper.lower * self.cap)
+        physical = _pv_rule(self.mapper, self.mapper.lower * self.cap, info)
         return self.mapper.to_normalised(physical)
 
 
@@ -150,7 +153,7 @@ class PUDroop:
         # One share per asset; spread onto the components, of which only the PV
         # active power ones are used.
         per_component = np.repeat(share, [spec.dim for spec in self.mapper.specs])
-        physical = _pv_rule(self.mapper, self.mapper.lower * (1.0 - per_component))
+        physical = _pv_rule(self.mapper, self.mapper.lower * (1.0 - per_component), info)
         return self.mapper.to_normalised(physical)
 
 
@@ -190,7 +193,7 @@ class QUDroop:
     def act(self, info: InformationSet) -> np.ndarray:
         """Absorb reactive power proportionally to the local voltage excess."""
         vm = np.asarray(info.measurements["vm_pu"])
-        physical = self.mapper.neutral.copy()
+        physical = self.mapper.default_physical(info)
         cursor = 0
         kinds = self.mapper.kinds or ("pv",) * len(self.mapper.specs)
         for position, spec, kind in zip(
@@ -217,8 +220,8 @@ class QUDroop:
         return self.mapper.to_normalised(physical)
 
 
-def _pv_rule(mapper: ActionMapper, pv_values: np.ndarray) -> np.ndarray:
-    """Neutral everywhere, ``pv_values`` on the PV active power components.
+def _pv_rule(mapper: ActionMapper, pv_values: np.ndarray, info=None) -> np.ndarray:
+    """Default everywhere, ``pv_values`` on the PV active power components.
 
     The rules B2 to B4 are PV rules. Applied to a battery, "cap at 40 % of the
     lower bound" would be a permanent discharge at 40 % of rated power. A mapper
@@ -227,7 +230,7 @@ def _pv_rule(mapper: ActionMapper, pv_values: np.ndarray) -> np.ndarray:
     if mapper.kinds is None:
         return pv_values
     mask = mapper.component_mask("pv", "p_mw")
-    return np.where(mask, pv_values, mapper.neutral)
+    return np.where(mask, pv_values, mapper.default_physical(info))
 
 
 BASELINES = {
