@@ -28,10 +28,9 @@ mode 2, decision D14: weights shared per asset kind, an individual setpoint per
 asset) is done: the per-asset observation layout and `SharedAssetPolicy`
 (`--agent-config configs/agent/ppo_shared.yaml`). 4.3, the heat pump (D15), is in
 two parts, both done: the when2heat adapter (4.3a) and the model with its place
-in the environment (4.3b, `train.py --heat-pumps`). 4.4, EV sessions (D16), is in
-two parts: 4.4a, the sessions, is done (`data/sources/ev_sessions.py`); the
-ElaadNL export is still to be provided (`data/README.md`), until then the
-connection times are synthetic. 4.4b, the charge point model, is next. **Invariant I2 is satisfied since 4.1**: asset dynamics
+in the environment (4.3b, `train.py --heat-pumps`). 4.4, EV sessions (D17, emobpy; superseding D16), is in two parts: 4.4a, the
+sessions, is done (`tools/emobpy/`, `data/sources/ev_sessions.py`); 4.4b, the
+charge point model, is next. **Invariant I2 is satisfied since 4.1**: asset dynamics
 are pure functions over a frozen `AssetState`. Its test in
 `tests/test_invariants.py` is parametrised over asset types — every new asset
 model (heat pump, charge point) adds a case to `_i2_assets()`, it does not get a
@@ -86,6 +85,10 @@ under which the multiplier can only grow.
   DWD temperature, `scripts/check_when2heat_timing.py`). `read_cop` reads the
   local wall clock as UTC instead and refuses unexpected gaps (`data/README.md`).
   Never use `utc_timestamp` from when2heat directly.
+- **emobpy runs only in `tools/emobpy/`** (its own frozen uv project, Python
+  3.9). Never add it to the project's dependencies. Its `set_seed` is not
+  enough for reproducibility and its tour sampling can loop forever; the tool
+  handles both. The project reads its Parquet output, checked by hash.
 - **PyTorch runs with one thread** (`--torch-threads`, default 1). With the
   default pool the shared policy took 7.6 ms per decision instead of 1.0: the
   threads fall asleep during every environment step and have to be woken for

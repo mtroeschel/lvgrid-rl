@@ -1,133 +1,146 @@
-"""Charging sessions from SimBench blocks and a connection-time distribution (D16)."""
+"""Home charging sessions from emobpy vehicle-years (D17)."""
 
 from __future__ import annotations
+
+import hashlib
+import json
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from lvgrid_rl.data.sources.ev_sessions import (
-    DwellDistribution,
-    assign_departures,
-    extract_sessions,
-    read_dwell_csv,
-    synthetic_dwell,
+    home_sessions,
+    read_emobpy_run,
+    scale_to_annual,
 )
 
-STEP_H = 5 / 60
+SIM = pd.date_range("2016-01-03 23:00", periods=12 * 24 * 3, freq="5min", tz="UTC")
+"""Three days of simulation steps, from 2016-01-04 00:00 local."""
 
 
-def _profile(blocks, n=288, start="2016-01-04 00:00"):
-    """A 5-minute curve with constant-power blocks ``(first_step, n_steps, kw)``."""
-    values = np.zeros(n)
-    for first, length, kw in blocks:
-        values[first : first + length] = kw / 1000
-    index = pd.date_range(start, periods=n, freq="5min", tz="UTC")
-    return pd.Series(values, index=index)
+def _emobpy(stays, start="2016-01-04 00:00", days=3):
+    """An emobpy-like frame at 15 minutes: away except for ``stays``.
 
-
-def _fixed(hours: float) -> DwellDistribution:
-    """Every arrival stays ``hours`` (the upper edge of a single narrow bin)."""
-    return DwellDistribution(
-        duration_bins_h=(hours - 1e-6, hours),
-        probabilities=np.tile([0.0, 1.0], (24, 1)),
-        source="test",
+    ``stays`` holds ``(first_slot, n_slots, kw_slots)``: the vehicle is home in
+    ``[first, first + n)`` and draws ``kw`` for the first ``kw_slots`` slots.
+    """
+    n = days * 96
+    times = pd.date_range(start, periods=n, freq="15min")
+    state = np.array(["leisure"] * n, dtype=object)
+    point = np.array(["none"] * n, dtype=object)
+    grid = np.zeros(n)
+    for first, length, kw, kw_slots in stays:
+        state[first : first + length] = "home"
+        point[first : first + length] = "home"
+        grid[first : first + kw_slots] = kw
+    return pd.DataFrame(
+        {
+            "datetime_local": times,
+            "state": state,
+            "charging_point": point,
+            "charge_grid": grid,
+        }
     )
 
 
-def test_each_block_is_one_session_with_its_energy() -> None:
-    start, end, energy = extract_sessions(_profile([(10, 12, 3.7), (100, 6, 11.0)]))
-    assert list(start) == [10, 100]
-    assert list(end) == [22, 106]
-    assert energy == pytest.approx([3.7e-3 * 1.0, 11e-3 * 0.5])
+def test_a_stay_at_home_is_one_session_with_its_grid_energy() -> None:
+    frame = _emobpy([(72, 48, 11.0, 4)])  # home 18:00-06:00, 11 kW for an hour
+    table = home_sessions(frame, SIM, p_max_mw=0.011)
+    assert len(table) == 1
+    assert table.energy_mwh[0] == pytest.approx(0.011)
+    # 18:00 local is 17:00 UTC: 17 h after the start of the index at 5 min.
+    assert table.arrival[0] == 18 * 12
+    assert table.departure[0] - table.arrival[0] == 12 * 12
 
 
-def test_blocks_close_together_are_one_interrupted_session() -> None:
-    profile = _profile([(10, 6, 3.7), (19, 6, 3.7)])  # 15-minute gap
-    start, end, energy = extract_sessions(profile, merge_gap_min=15)
-    assert list(start) == [10] and list(end) == [25]
-    apart = extract_sessions(profile, merge_gap_min=10)
-    assert len(apart[0]) == 2
+def test_stays_without_energy_are_dropped_and_counted() -> None:
+    frame = _emobpy([(10, 8, 0.0, 0), (72, 48, 3.7, 8)])
+    table = home_sessions(frame, SIM, p_max_mw=0.0037)
+    assert len(table) == 1
+    assert table.counts["no_energy"] == 1
 
 
-def test_a_feeding_profile_is_refused() -> None:
-    with pytest.raises(ValueError, match="must not feed in"):
-        extract_sessions(-_profile([(10, 6, 3.7)]))
+def test_a_stay_cut_at_the_edge_of_the_year_keeps_its_share() -> None:
+    """Home from before the simulation starts: the part inside counts.
+
+    Home 22:00 to 02:00 local (21:00 to 01:00 UTC), drawing 3.7 kW throughout;
+    the index starts at 23:00 UTC, so half the stay and half its energy lie
+    inside.
+    """
+    frame = _emobpy([(8, 16, 3.7, 16)], start="2016-01-03 20:00", days=1)
+    table = home_sessions(frame, SIM, p_max_mw=0.0037)
+    assert table.counts["cut_at_year_edge"] == 1
+    assert table.arrival[0] == 0
+    assert table.departure[0] == 2 * 12
+    assert table.energy_mwh[0] == pytest.approx(0.0037 * 4 / 2)
 
 
-def test_the_departure_follows_the_drawn_connection_time() -> None:
-    profile = _profile([(12, 6, 3.7)])  # arrives 01:00 UTC
-    table = assign_departures(profile, 0.0037, _fixed(4.0), np.random.default_rng(0))
-    assert table.departure[0] - table.arrival[0] == round(4.0 / STEP_H)
-    assert table.raised_to_feasible == 0 and table.capped_at_next == 0
+def test_scaling_reaches_the_target_and_reports_its_factor() -> None:
+    frame = _emobpy([(72, 48, 11.0, 4), (168, 40, 11.0, 2)])
+    table = scale_to_annual(home_sessions(frame, SIM, 0.011), 0.008, SIM)
+    assert table.total_energy_mwh == pytest.approx(0.008)
+    assert table.scale == pytest.approx(0.008 / 0.0165)
 
 
-def test_a_departure_too_early_for_the_energy_is_moved_later_and_counted() -> None:
-    """22 kW in SimBench's curve, 3.7 kW nominal: the energy needs longer."""
-    profile = _profile([(12, 12, 22.0)])  # 22 kWh in one hour
-    table = assign_departures(profile, 0.0037, _fixed(1.0), np.random.default_rng(0))
-    needed = int(np.ceil(0.022 / 0.0037 / STEP_H))
-    assert table.departure[0] - table.arrival[0] == needed
-    assert table.raised_to_feasible == 1
+def test_scaling_up_past_what_fits_is_capped_and_counted() -> None:
+    frame = _emobpy([(72, 4, 11.0, 4)])  # one hour at home, full power
+    table = scale_to_annual(home_sessions(frame, SIM, 0.011), 0.05, SIM)
+    assert table.counts["reduced_after_scaling"] == 1
+    assert table.energy_mwh[0] == pytest.approx(0.011)
 
 
-def test_a_departure_after_the_next_arrival_is_capped_and_counted() -> None:
-    profile = _profile([(12, 6, 3.7), (60, 6, 3.7)])
-    table = assign_departures(profile, 0.0037, _fixed(10.0), np.random.default_rng(0))
-    assert table.departure[0] == table.arrival[1]
-    assert table.capped_at_next == 1
+def test_every_session_fits_at_nominal_power() -> None:
+    frame = _emobpy([(72, 48, 11.0, 30), (168, 20, 3.7, 20), (250, 30, 11.0, 5)])
+    for target in (0.01, 0.2):
+        table = scale_to_annual(home_sessions(frame, SIM, 0.011), target, SIM)
+        hours = (table.departure - table.arrival) * 5 / 60
+        assert np.all(table.energy_mwh <= hours * table.p_max_mw + 1e-12)
 
 
-def test_every_session_can_deliver_its_energy() -> None:
-    profile = _profile([(10, 30, 11.0), (50, 20, 3.7), (200, 10, 22.0)])
-    table = assign_departures(profile, 0.011, synthetic_dwell(), np.random.default_rng(3))
-    window_h = (table.departure - table.arrival) * STEP_H
-    assert np.all(window_h * table.p_max_mw >= table.energy_mwh - 1e-12)
+def test_the_spring_change_is_read_as_wall_clock_time() -> None:
+    """Home from 01:00 to 04:00 local on 27 March 2016 is two hours in UTC."""
+    index = pd.date_range("2016-03-26 23:00", periods=12 * 24, freq="5min", tz="UTC")
+    frame = _emobpy([(4, 12, 3.7, 4)], start="2016-03-27 00:00", days=1)
+    table = home_sessions(frame, index, p_max_mw=0.0037)
+    assert (table.departure[0] - table.arrival[0]) * 5 == 120
 
 
-def test_the_draw_depends_on_the_hour_of_arrival() -> None:
-    dwell = synthetic_dwell()
-    rng = np.random.default_rng(0)
-    evening = np.mean([dwell.draw_h(19, rng) for _ in range(2000)])
-    noon = np.mean([dwell.draw_h(12, rng) for _ in range(2000)])
-    assert evening > 2 * noon
+def _write_run(tmp_path, frame, **entry):
+    path = tmp_path / "load_15.parquet"
+    frame.to_parquet(path, index=False)
+    manifest = {
+        "charge_points": [
+            {
+                "asset_id": "load:15",
+                "file": path.name,
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "nominal_power_kw": 11.0,
+                "annual_energy_mwh": 1.36,
+                "battery_capacity_kwh": 58.0,
+                "driver": "fulltime",
+                "vehicle": ["Volkswagen", "ID.3", 2020],
+                "weeks": [],
+                **entry,
+            }
+        ]
+    }
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
 
-def test_sessions_are_reproducible_for_a_seed() -> None:
-    profile = _profile([(10, 6, 3.7), (150, 6, 3.7)])
-    a = assign_departures(profile, 0.0037, synthetic_dwell(), np.random.default_rng(7))
-    b = assign_departures(profile, 0.0037, synthetic_dwell(), np.random.default_rng(7))
-    assert np.array_equal(a.departure, b.departure)
+def test_a_run_is_read_and_verified(tmp_path) -> None:
+    _write_run(tmp_path, _emobpy([(72, 48, 11.0, 4)]))
+    vehicles = read_emobpy_run(tmp_path)
+    assert vehicles["load:15"].driver == "fulltime"
+    assert vehicles["load:15"].annual_energy_mwh == pytest.approx(1.36)
 
 
-def test_the_synthetic_distribution_says_what_it_is() -> None:
-    assert synthetic_dwell().source == "synthetic"
+def test_a_changed_file_fails_the_checksum(tmp_path) -> None:
+    _write_run(tmp_path, _emobpy([(72, 48, 11.0, 4)]), sha256="0" * 64)
+    with pytest.raises(ValueError, match="SHA-256"):
+        read_emobpy_run(tmp_path)
 
 
-@pytest.mark.parametrize(
-    ("bins", "probs", "match"),
-    [
-        ((1.0, 0.5), np.tile([0.5, 0.5], (24, 1)), "increasing"),
-        ((1.0, 2.0), np.tile([0.5, 0.5], (23, 1)), "shape"),
-        ((1.0, 2.0), np.tile([0.6, 0.6], (24, 1)), "sums to one"),
-    ],
-)
-def test_inconsistent_distributions_are_refused(bins, probs, match) -> None:
-    with pytest.raises(ValueError, match=match):
-        DwellDistribution(duration_bins_h=bins, probabilities=probs, source="test")
-
-
-def test_the_intermediate_csv_is_read_and_checked(tmp_path) -> None:
-    rows = [
-        {"arrival_hour": h, "duration_h": d, "probability": p}
-        for h in range(24)
-        for d, p in ((2.0, 0.3), (8.0, 0.7))
-    ]
-    path = tmp_path / "dwell.csv"
-    pd.DataFrame(rows).to_csv(path, index=False)
-    dwell = read_dwell_csv(path, source="elaadnl-test")
-    assert dwell.duration_bins_h == (2.0, 8.0)
-    assert dwell.source == "elaadnl-test"
-    pd.DataFrame(rows[:-1]).to_csv(path, index=False)
-    with pytest.raises(ValueError, match="every duration bin"):
-        read_dwell_csv(path, source="x")
+def test_a_missing_run_says_how_to_make_it(tmp_path) -> None:
+    with pytest.raises(FileNotFoundError, match="generate.py"):
+        read_emobpy_run(tmp_path / "nothing")

@@ -64,30 +64,27 @@ other gap. The heat demand columns are not used and not claimed either way.
 DWD data for that check: Open Data of the Deutscher Wetterdienst, Datenlizenz
 Deutschland – Namensnennung – Version 2.0, stored under `data/raw/dwd/`.
 
-## Notes on the ElaadNL data (to be provided)
+## Notes on the emobpy data (decision D17)
 
-Decision D16 takes only one quantity from ElaadNL: how long a vehicle stays
-connected when charging **privately at home**, depending on the hour it
-arrives. ElaadNL publishes this through its open data dashboard
-(<https://elaad.nl/data/>) as aggregated distributions, with a download of the
-data behind each graph but no direct file URL, so it is exported by hand.
+Generated, not downloaded: `tools/emobpy/generate.py` runs emobpy 0.6.2 in a
+frozen environment of its own and writes `data/raw/emobpy/<run>/` — one Parquet
+file per charge point and a `manifest.json` with versions, seeds, driver types,
+vehicle models, every retry, and the SHA-256 of each file. The project reads
+these files only and verifies them against the manifest.
 
-What to export, from the private / home charging section:
+    uv run python scripts/list_charge_points.py      # project env: configs/ev/charge_points.json
+    cd tools/emobpy && uv sync --locked && uv run python generate.py
 
-1. **Preferred:** the joint distribution of arrival time and connection
-   duration (a heat map or table by arrival hour), which gives the conditional
-   distribution directly.
-2. **Otherwise:** the arrival-time distribution and the connection-time
-   distribution separately. Their combination then assumes independence of the
-   two, which is wrong for home charging (evening arrivals stay overnight) and
-   is recorded as an assumption.
+A full run (7 charge points, 53 weeks) takes about two hours on 12 workers.
+emobpy (MIT licence) uses the mobility statistics of *Mobilität in Deutschland*
+2017 and ERA5 weather; cite Gaete-Morales et al. (2021), Scientific Data 8:152.
 
-Put the files under `data/raw/elaad/` unchanged, together with the date of the
-download and the licence shown on the platform. They are converted once into the
-intermediate CSV that `lvgrid_rl.data.sources.ev_sessions.read_dwell_csv` reads
-(`arrival_hour`, `duration_h`, `probability`); the converter is written against
-the actual export. Until then `synthetic_dwell()` stands in and is named as the
-source wherever it is used.
+Two defects of emobpy are worked around and recorded in the tool: its
+`set_seed` does not seed the generator the mobility model uses, and its tour
+sampling has no iteration limit (`docs/architecture.md`, §5, D17).
+
+ElaadNL, which D16 had relied on, publishes no distribution file — only a
+profile generator — and is not used.
 
 ## To clarify before publication
 

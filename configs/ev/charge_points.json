@@ -1,0 +1,55 @@
+{
+  "grid": "1-LV-rural1--2-sw",
+  "scenario": "moderate_growth",
+  "charge_points": [
+    {
+      "asset_id": "load:15",
+      "bus": 8,
+      "simbench_profile": "HLS_A_11.0",
+      "nominal_power_kw": 11.0,
+      "annual_energy_mwh": 1.356184
+    },
+    {
+      "asset_id": "load:18",
+      "bus": 11,
+      "simbench_profile": "HLS_A_3.7",
+      "nominal_power_kw": 3.7,
+      "annual_energy_mwh": 0.996421
+    },
+    {
+      "asset_id": "load:19",
+      "bus": 10,
+      "simbench_profile": "HLS_B_3.7",
+      "nominal_power_kw": 3.7,
+      "annual_energy_mwh": 1.035107
+    },
+    {
+      "asset_id": "load:20",
+      "bus": 8,
+      "simbench_profile": "HLS_A_22.0",
+      "nominal_power_kw": 22.0,
+      "annual_energy_mwh": 1.310308
+    },
+    {
+      "asset_id": "load:21",
+      "bus": 14,
+      "simbench_profile": "HLS_A_11.0",
+      "nominal_power_kw": 11.0,
+      "annual_energy_mwh": 1.356184
+    },
+    {
+      "asset_id": "load:23",
+      "bus": 11,
+      "simbench_profile": "HLS_A_22.0",
+      "nominal_power_kw": 22.0,
+      "annual_energy_mwh": 1.310308
+    },
+    {
+      "asset_id": "load:24",
+      "bus": 5,
+      "simbench_profile": "HLS_A_3.7",
+      "nominal_power_kw": 3.7,
+      "annual_energy_mwh": 0.996421
+    }
+  ]
+}

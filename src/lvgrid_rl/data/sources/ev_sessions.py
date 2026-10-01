@@ -1,249 +1,246 @@
-"""Charging sessions for the grid's charge points (M4, step 4.4a, decision D16).
+"""Home charging sessions from emobpy vehicle-years (M4, step 4.4a, decision D17).
 
-SimBench gives charge points as fixed load curves (``HLS_*``), which describe
-when energy was drawn but not when a vehicle could have drawn it. A controllable
-charge point needs sessions: arrival, departure, energy. Decision D16:
+D17 replaces D16. Sessions come from emobpy (Gaete-Morales et al. 2021, mobility
+statistics of the German survey MiD 2017), generated offline by
+``tools/emobpy/generate.py`` in a frozen environment of their own, one vehicle
+per charge point, charging **only at home** at the charge point's nominal power
+and at fast chargers en route on trips longer than the battery allows. The
+project never imports emobpy; it reads the Parquet files that tool writes and
+checks them against the SHA-256 in its manifest.
 
-* **Arrival and energy come from SimBench.** Every contiguous charging block of
-  an ``HLS_*`` profile is one session; blocks separated by no more than
-  ``merge_gap_min`` are one interrupted session. This keeps the timing and the
-  energy of the grid dataset, as D15 did for the heat pumps.
-* **Departure comes from ElaadNL.** The connection time of private (home)
-  charging, conditional on the hour of arrival, is drawn from ElaadNL's
-  published distribution; it is the one quantity the load curve cannot supply.
-* **Power is the nominal rating** of the profile (3.7, 11 or 22 kW). The
-  scenario's growth factor stays on the energy, not on the power: a 22 kW
-  wallbox scaled to 28.3 kW does not exist.
+From an emobpy vehicle-year, one session is one stay at home: arrival when the
+vehicle comes home, departure when it leaves, and as energy what emobpy's
+``immediate`` strategy draws from the grid during the stay -- the energy the
+vehicle needs before it leaves, after its trips and any charging en route.
 
-A session is feasible by construction: the departure is no earlier than the
-energy needs at nominal power, and no later than the next arrival at the same
-charge point. Both corrections are counted and reported, because each one moves
-the result away from the ElaadNL distribution.
+**Energy level.** The sessions are scaled so that each charge point's annual
+energy equals that of its SimBench curve in the scenario. The emobpy vehicles
+keep their structure -- when they come and go, how energy is spread over the
+stays -- and the grid dataset keeps its energy, so the uncontrolled grid stays
+comparable with M3. The scale factor is reported per charge point.
 
-**What the SimBench curves are.** Their blocks are small and frequent -- a
-median of 3 to 5 kWh, some 220 a year per charge point -- and at 11 or 22 kW the
-power reaches its maximum in only 1 to 7 % of a block. They read as averaged
-expected values rather than single real sessions. Combined with overnight
-connection times this gives small energies a long window, so the flexibility
-the charge points offer is, if anything, overstated. Recorded with D16.
+**Time.** emobpy's clock is local wall-clock time (its weather series are in
+Europe/Berlin). Arrivals and departures are converted to UTC as events; on the
+two daylight-saving nights a session straddling the change is an hour longer
+or shorter on the wall clock than in UTC, which is the physical reading.
 
-**The ElaadNL file.** ElaadNL publishes aggregated distributions through a
-dashboard without a direct download. :func:`read_dwell_csv` reads an
-intermediate CSV -- one row per arrival hour and connection-time bin -- into
-which the dashboard export is converted once; until it is in place, tests and
-development use :func:`synthetic_dwell`, which is labelled as such everywhere it
-appears.
+Every correction is counted in :class:`SessionTable`: stays without energy
+(the battery was full), sessions cut at the edges of the simulation year, and
+energy reduced because a scaled session would not fit at nominal power.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import hashlib
+import json
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 __all__ = [
-    "DwellDistribution",
     "SessionTable",
-    "extract_sessions",
-    "assign_departures",
-    "read_dwell_csv",
-    "synthetic_dwell",
+    "EmobpyVehicle",
+    "read_emobpy_run",
+    "home_sessions",
+    "scale_to_annual",
 ]
 
-
-@dataclass(frozen=True, slots=True)
-class DwellDistribution:
-    """Connection time conditional on the local hour of arrival.
-
-    Args:
-        duration_bins_h: Right edges of the connection-time bins, in hours,
-            increasing; a draw is uniform within its bin.
-        probabilities: Array of shape ``(24, n_bins)``; row ``h`` is the
-            distribution for arrivals in local hour ``h`` and sums to one.
-        source: Where it came from, for the run record -- ``"synthetic"`` until
-            the ElaadNL file is in place.
-    """
-
-    duration_bins_h: tuple[float, ...]
-    probabilities: np.ndarray
-    source: str
-
-    def __post_init__(self) -> None:
-        edges = np.asarray(self.duration_bins_h)
-        if (
-            edges.ndim != 1
-            or edges.size == 0
-            or np.any(np.diff(edges) <= 0)
-            or edges[0] <= 0
-        ):
-            raise ValueError("duration_bins_h must be positive and increasing")
-        p = np.asarray(self.probabilities, dtype=np.float64)
-        if p.shape != (24, edges.size):
-            raise ValueError(f"probabilities must have shape (24, {edges.size})")
-        if np.any(p < 0) or not np.allclose(p.sum(axis=1), 1.0, atol=1e-6):
-            raise ValueError("each arrival hour needs a distribution that sums to one")
-        object.__setattr__(self, "probabilities", p)
-
-    def draw_h(self, arrival_hour: int, rng: np.random.Generator) -> float:
-        """One connection time in hours for an arrival in ``arrival_hour``."""
-        edges = np.asarray(self.duration_bins_h)
-        k = int(rng.choice(edges.size, p=self.probabilities[arrival_hour]))
-        lo = 0.0 if k == 0 else edges[k - 1]
-        return float(rng.uniform(lo, edges[k]))
+EMOBPY_STEP_H = 0.25
+"""emobpy's time step, 15 minutes."""
 
 
 @dataclass(frozen=True, slots=True)
 class SessionTable:
-    """Sessions of one charge point, on simulation step indices.
+    """Charging sessions of one charge point, on simulation step indices.
 
     Args:
         arrival: Step at which the vehicle arrives.
         departure: Step at which it leaves (exclusive): it can charge in
             ``[arrival, departure)``.
-        energy_mwh: Energy it wants by departure.
-        p_max_mw: Nominal charging power of the charge point.
-        raised_to_feasible: Sessions whose drawn departure was moved later
-            because the energy would not fit at nominal power.
-        capped_at_next: Sessions whose departure was moved earlier to the next
-            arrival.
-        source: The connection-time distribution used.
+        energy_mwh: Grid-side energy it needs by departure.
+        p_max_mw: Nominal power of the charge point.
+        counts: Corrections applied, by kind -- see the module docstring.
+        scale: Factor applied to bring the annual energy to the target, or 1.
     """
 
     arrival: np.ndarray
     departure: np.ndarray
     energy_mwh: np.ndarray
     p_max_mw: float
-    raised_to_feasible: int
-    capped_at_next: int
-    source: str
+    counts: dict[str, int] = field(default_factory=dict)
+    scale: float = 1.0
 
     def __len__(self) -> int:
         return int(self.arrival.size)
 
+    @property
+    def total_energy_mwh(self) -> float:
+        """Energy over all sessions."""
+        return float(self.energy_mwh.sum())
 
-def extract_sessions(
-    profile_mw: pd.Series, merge_gap_min: float = 15.0
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Charging blocks of a load curve: start step, end step, energy.
+
+@dataclass(frozen=True, slots=True)
+class EmobpyVehicle:
+    """One vehicle-year from the emobpy tool, with its manifest entry."""
+
+    asset_id: str
+    frame: pd.DataFrame
+    nominal_power_kw: float
+    annual_energy_mwh: float
+    battery_capacity_kwh: float
+    driver: str
+    vehicle: tuple
+    weeks: list
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def read_emobpy_run(run_dir: Path | str) -> dict[str, EmobpyVehicle]:
+    """Read the vehicle-years of one tool run, verified against the manifest.
+
+    Raises:
+        FileNotFoundError: if the run is missing, with the command to make it.
+        ValueError: if a file's checksum differs from the manifest.
+    """
+    run_dir = Path(run_dir)
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(
+            f"no emobpy run at {run_dir}. Generate it with\n"
+            "    cd tools/emobpy && uv sync --locked && uv run python generate.py"
+        )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    out = {}
+    for entry in manifest["charge_points"]:
+        path = run_dir / entry["file"]
+        digest = _sha256(path)
+        if digest != entry["sha256"]:
+            raise ValueError(
+                f"{path} has SHA-256 {digest}, the manifest {entry['sha256']}"
+            )
+        out[entry["asset_id"]] = EmobpyVehicle(
+            asset_id=entry["asset_id"],
+            frame=pd.read_parquet(path),
+            nominal_power_kw=float(entry["nominal_power_kw"]),
+            annual_energy_mwh=float(entry["annual_energy_mwh"]),
+            battery_capacity_kwh=float(entry["battery_capacity_kwh"]),
+            driver=entry["driver"],
+            vehicle=tuple(entry["vehicle"]),
+            weeks=entry["weeks"],
+        )
+    return out
+
+
+def _to_step(local: pd.Series, index: pd.DatetimeIndex) -> np.ndarray:
+    """Wall-clock times to simulation steps, rounded up.
+
+    Relative to the start of the index and not clipped: a time before the year
+    gives a negative step, one after it a step past the end, so that sessions
+    at the edges can be recognised and cut.
+    """
+    utc = (
+        pd.DatetimeIndex(local)
+        .tz_localize("Europe/Berlin", ambiguous=True, nonexistent="shift_forward")
+        .tz_convert("UTC")
+    )
+    step_ns = (index[1] - index[0]).value
+    offset = utc.asi8 - index[0].value
+    return -(-offset // step_ns)
+
+
+def home_sessions(
+    frame: pd.DataFrame, index: pd.DatetimeIndex, p_max_mw: float
+) -> SessionTable:
+    """Sessions from one emobpy vehicle-year, on a simulation index.
 
     Args:
-        profile_mw: The SimBench charge point profile on the simulation index,
-            consumer convention (``>= 0``).
-        merge_gap_min: Blocks separated by at most this are one session.
-
-    Returns:
-        ``(start, end, energy_mwh)``, with ``end`` exclusive.
+        frame: The tool's output: ``datetime_local``, ``state``,
+            ``charging_point``, ``charge_grid`` (kW), at 15 minutes.
+        index: The simulation index (UTC).
+        p_max_mw: Nominal power of the charge point.
     """
-    values = profile_mw.to_numpy(dtype=np.float64)
-    if np.any(values < -1e-12):
-        raise ValueError("a charge point profile must not feed in")
-    step_h = (profile_mw.index[1] - profile_mw.index[0]) / pd.Timedelta("1h")
-    on = values > 1e-9
-    edges = np.flatnonzero(np.diff(np.r_[0, on.astype(np.int8), 0]))
-    starts, ends = list(edges[::2]), list(edges[1::2])
-    merge_steps = int(round(merge_gap_min / 60.0 / step_h))
-    merged_s, merged_e = [], []
-    for s, e in zip(starts, ends, strict=True):
-        if merged_e and s - merged_e[-1] <= merge_steps:
-            merged_e[-1] = e
-        else:
-            merged_s.append(s)
-            merged_e.append(e)
-    start = np.asarray(merged_s, dtype=np.int64)
-    end = np.asarray(merged_e, dtype=np.int64)
-    energy = np.array(
-        [values[a:b].sum() * step_h for a, b in zip(start, end, strict=True)]
+    at_home = (frame["charging_point"].to_numpy() == "home") & (
+        frame["state"].to_numpy() == "home"
     )
-    return start, end, energy
+    edges = np.flatnonzero(np.diff(np.r_[0, at_home.astype(np.int8), 0]))
+    starts, ends = edges[::2], edges[1::2]
+    grid_mwh = frame["charge_grid"].to_numpy(dtype=np.float64) * EMOBPY_STEP_H / 1000.0
+    energy = np.array([grid_mwh[a:b].sum() for a, b in zip(starts, ends, strict=True)])
 
+    times = frame["datetime_local"]
+    step = pd.Timedelta(hours=EMOBPY_STEP_H)
+    arrival = _to_step(times.iloc[starts].reset_index(drop=True), index)
+    departure = _to_step((times.iloc[ends - 1] + step).reset_index(drop=True), index)
 
-def assign_departures(
-    profile_mw: pd.Series,
-    p_max_mw: float,
-    dwell: DwellDistribution,
-    rng: np.random.Generator,
-    merge_gap_min: float = 15.0,
-) -> SessionTable:
-    """Sessions with arrival and energy from the profile, departure drawn.
-
-    The connection time is drawn for the local hour of arrival, then made
-    feasible: no earlier than the energy needs at ``p_max_mw``, no later than
-    the next arrival. The SimBench block itself is a lower bound too -- the
-    vehicle was there while it drew power.
-    """
-    start, end, energy = extract_sessions(profile_mw, merge_gap_min)
-    index = profile_mw.index
-    step_h = (index[1] - index[0]) / pd.Timedelta("1h")
-    local_hour = index[start].tz_convert("Europe/Berlin").hour
-    departure = np.empty_like(start)
-    raised = capped = 0
-    n_steps = len(index)
-    for i, (a, e, energy_i) in enumerate(zip(start, end, energy, strict=True)):
-        drawn = a + int(np.ceil(dwell.draw_h(int(local_hour[i]), rng) / step_h))
-        needed = a + int(np.ceil(energy_i / p_max_mw / step_h - 1e-9))
-        floor = max(needed, e)
-        if drawn < floor:
-            raised += 1
-            drawn = floor
-        limit = start[i + 1] if i + 1 < start.size else n_steps
-        if drawn > limit:
-            capped += 1
-            drawn = limit
-        departure[i] = drawn
-    if np.any(departure - start < np.ceil(energy / p_max_mw / step_h - 1e-9)):
-        raise ValueError(
-            "a session cannot deliver its energy before the next arrival even at "
-            "nominal power; the profile and the rating are inconsistent"
-        )
-    return SessionTable(
-        arrival=start,
-        departure=departure,
+    counts = {"no_energy": 0, "outside_year": 0, "cut_at_year_edge": 0}
+    keep = energy > 1e-9
+    counts["no_energy"] = int((~keep).sum())
+    n = len(index)
+    inside = (departure > 0) & (arrival < n)
+    counts["outside_year"] = int((keep & ~inside).sum())
+    keep &= inside
+    cut = keep & ((arrival < 0) | (departure > n))
+    counts["cut_at_year_edge"] = int(cut.sum())
+    arrival, departure, energy = arrival[keep], departure[keep], energy[keep]
+    # A stay cut at the edge of the year keeps the energy of the part inside it,
+    # pro rata -- the vehicle draws it during the stay, not all at its end.
+    length = (departure - arrival).astype(np.float64)
+    arrival_c, departure_c = np.clip(arrival, 0, n), np.clip(departure, 0, n)
+    energy = energy * np.where(
+        length > 0, (departure_c - arrival_c) / np.maximum(length, 1), 0
+    )
+    table = SessionTable(
+        arrival=arrival_c,
+        departure=departure_c,
         energy_mwh=energy,
         p_max_mw=p_max_mw,
-        raised_to_feasible=raised,
-        capped_at_next=capped,
-        source=dwell.source,
+        counts=counts,
+    )
+    return _fit(table, index)
+
+
+def _fit(
+    table: SessionTable, index: pd.DatetimeIndex, key: str = "reduced_to_fit"
+) -> SessionTable:
+    """Cap each session's energy at what nominal power delivers in its window."""
+    step_h = (index[1] - index[0]) / pd.Timedelta("1h")
+    deliverable = (table.departure - table.arrival) * step_h * table.p_max_mw
+    over = table.energy_mwh > deliverable + 1e-12
+    counts = dict(table.counts)
+    counts[key] = counts.get(key, 0) + int(over.sum())
+    return SessionTable(
+        arrival=table.arrival,
+        departure=table.departure,
+        energy_mwh=np.minimum(table.energy_mwh, deliverable),
+        p_max_mw=table.p_max_mw,
+        counts=counts,
+        scale=table.scale,
     )
 
 
-def read_dwell_csv(path: Path | str, source: str) -> DwellDistribution:
-    """Read the intermediate connection-time CSV.
+def scale_to_annual(
+    table: SessionTable, target_mwh: float, index: pd.DatetimeIndex
+) -> SessionTable:
+    """Scale the energies so that their sum is ``target_mwh``.
 
-    Columns ``arrival_hour`` (local, 0-23), ``duration_h`` (right bin edge) and
-    ``probability``; every hour must carry the same bins.
+    A factor above one can push a session past what nominal power delivers in
+    its window; such sessions are capped and counted (``reduced_after_scaling``),
+    so the total may end slightly below the target.
     """
-    frame = pd.read_csv(path)
-    missing = {"arrival_hour", "duration_h", "probability"} - set(frame.columns)
-    if missing:
-        raise ValueError(f"{path} lacks columns {sorted(missing)}")
-    table = frame.pivot(index="arrival_hour", columns="duration_h", values="probability")
-    if list(table.index) != list(range(24)):
-        raise ValueError(f"{path} must cover arrival hours 0 to 23")
-    if table.isna().any().any():
-        raise ValueError(f"{path}: every arrival hour needs every duration bin")
-    return DwellDistribution(
-        duration_bins_h=tuple(float(c) for c in table.columns),
-        probabilities=table.to_numpy(),
-        source=source,
+    total = table.total_energy_mwh
+    if total <= 0.0:
+        raise ValueError("no session energy to scale")
+    factor = target_mwh / total
+    scaled = SessionTable(
+        arrival=table.arrival,
+        departure=table.departure,
+        energy_mwh=table.energy_mwh * factor,
+        p_max_mw=table.p_max_mw,
+        counts=table.counts,
+        scale=factor,
     )
-
-
-def synthetic_dwell() -> DwellDistribution:
-    """A stand-in until the ElaadNL file is in place. Not data.
-
-    Evening arrivals stay overnight, daytime arrivals for a few hours -- the
-    qualitative shape of home charging, with made-up numbers. Every result that
-    rests on it is provisional, and the run record names it as the source.
-    """
-    bins = (1.0, 2.0, 4.0, 8.0, 12.0, 16.0)
-    rows = []
-    for hour in range(24):
-        if 16 <= hour or hour < 4:  # evening and night: mostly overnight
-            rows.append([0.05, 0.05, 0.10, 0.20, 0.40, 0.20])
-        else:  # daytime: short stays
-            rows.append([0.20, 0.25, 0.30, 0.15, 0.07, 0.03])
-    return DwellDistribution(
-        duration_bins_h=bins, probabilities=np.array(rows), source="synthetic"
-    )
+    return _fit(scaled, index, key="reduced_after_scaling")
