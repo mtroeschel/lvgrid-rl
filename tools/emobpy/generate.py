@@ -82,11 +82,15 @@ FIRST_MONDAY = date(2015, 12, 28)  # the week containing 1 January 2016
 DESTINATIONS = ("errands", "escort", "leisure", "shopping", "workplace")
 
 
-def _seed_all(seed: int) -> None:
-    """Seed every generator emobpy draws from; set_seed alone does not."""
+def _seed_all(seed: int, folder: str) -> None:
+    """Seed every generator emobpy draws from; set_seed alone does not.
+
+    set_seed also deletes and rewrites ``seed.txt`` in ``folder``; a folder per
+    week keeps parallel jobs from racing on one file.
+    """
     from emobpy.tools import set_seed
 
-    set_seed(seed=seed, dir="config_files")
+    set_seed(seed=seed, dir=str(folder))
     np.random.seed(seed)
     random.seed(seed)
 
@@ -95,7 +99,7 @@ def _mobility_job(driver: str, seed: int, monday: str, folder: str) -> None:
     """One week of mobility; run as ``generate.py --mobility-job`` in its own process."""
     from emobpy import Mobility
 
-    _seed_all(seed)
+    _seed_all(seed, folder)
     m = Mobility(config_folder="config_files")
     m.set_params(
         "week", 168, 0.25, driver, date.fromisoformat(monday).strftime("%m/%d/%Y")
@@ -172,7 +176,7 @@ def _week_charging(
     """
     from emobpy import Availability, Charging, Consumption, DataBase, HeatInsulation
 
-    _seed_all(record["seed"])
+    _seed_all(record["seed"], record["folder"])
 
     db = DataBase(record["folder"])
     db.loadfiles_batch(kind="driving")
