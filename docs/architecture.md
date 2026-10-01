@@ -607,16 +607,17 @@ starts and ends at home. Because the time limit depends on the machine, a run
 is reproduced with `--replay`, which takes every week's successful seed from
 its manifest and runs it without a limit. A comparison of two fresh runs found
 that the charging step was unseeded as well (emobpy draws the fast charger en
-route from numpy's global generator); it is now seeded with the week's seed.
+route from numpy's global generator); it is now seeded with the week's seed. Two replays of the 2016 run, on 6 and 12 workers, gave
+bit-identical files.
 
 *The 2016 run* (`data/raw/emobpy/2016-home-only`, seven charge points). The
 draw gave five full-time commuters and two non-commuters — no part-time driver,
 which at a share of 14 % happens for seven charge points with probability 0.36.
-Per charge point 244 to 300 sessions a year, a median stay of 15 to 19 hours
+Per charge point 244 to 299 sessions a year, a median stay of 15 to 19 hours
 and a median arrival at 17 to 18 h local. emobpy's home energy is 1.4 to
-2.5 MWh a year (8,800 to 10,700 km), the SimBench curves 1.0 to 1.36 MWh, so
-the **scale factors are 0.54 to 0.73** — the vehicles are scaled down, and no
-session had to be capped to fit. Fast charging en route took 435 to 1,136 kWh
+2.4 MWh a year (8,800 to 10,700 km), the SimBench curves 1.0 to 1.36 MWh, so
+the **scale factors are 0.56 to 0.71** — the vehicles are scaled down, and no
+session had to be capped to fit. Fast charging en route took 451 to 1,110 kWh
 a year that never reaches the low-voltage grid.
 
 *Limitations.* emobpy is a model of mobility, not a measurement of charging;
