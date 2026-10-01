@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from lvgrid_rl.components.bess import BatteryState, BatteryStorage
+from lvgrid_rl.components.heat_pump import HeatPump, HeatPumpState
 from lvgrid_rl.components.pv import PvState, PvSystem
 from lvgrid_rl.core import information
 from lvgrid_rl.core.information import (
@@ -99,6 +100,8 @@ SCHEMA_TYPES = [
     PvSystem,
     BatteryState,
     BatteryStorage,
+    HeatPumpState,
+    HeatPump,
 ]
 
 # Fields without a physical unit: indices, names, flags, nested schemas.
@@ -130,6 +133,8 @@ UNITLESS_FIELDS = {
     "ratings",
     "series_id",
     "mode",
+    "cop_key",
+    "running",
 }
 
 

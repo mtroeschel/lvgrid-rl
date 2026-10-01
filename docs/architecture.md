@@ -527,6 +527,23 @@ is not used; the adapter reads the local wall clock as UTC (`data/README.md`).
 Annual figures are insensitive to that, the hour at which the COP is high is
 not, and that hour is what shifting a heat pump trades on.
 
+*Model (`components/heat_pump.py`, M4 4.3b).* The state is the heat stored above
+the bottom of the band (MWh), the last setpoint, whether the compressor runs and
+for how long. Heat drawn below the band lowers the temperature below it — the
+comfort deviation, integrated in Kh over each step — down to a floor one band
+width below, past which demand is unserved. Thermal demand and COP reach the
+model only through the exogenous input and the forecast (the COP as
+`ExogenousInput.realized_ratio`, a new `_ratio` unit for dimensionless
+quantities not bounded to [0, 1]); a model reading its own time series would be
+clairvoyant in a way I3 cannot detect. `to_setpoint` reports every limitation
+under its own key: rating, minimum modulation, buffer full over the hold,
+minimum idle, minimum run (yielding to a full buffer), maximum blocking while
+there is demand; `limit_to_physics` adds the buffer's high-limit cut-out per
+step. What a heat pump does when nobody intervenes is not a fixed power but its
+thermostat, `default_action` (hysteresis at 40 and 90 % fill). Starting values,
+not calibrated: 20 min minimum run and idle time, 120 min maximum blocking, 20 K
+band, standing loss set by the environment.
+
 **EV charge point.** Session based: the scenario generates a sequence
 `(t_arrival, t_departure, E_demand, P_max, soc_arrival)` per charge point. Charging
 power is controllable between arrival and departure; energy not delivered by

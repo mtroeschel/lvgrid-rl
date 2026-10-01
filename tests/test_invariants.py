@@ -115,14 +115,15 @@ def _i2_context():
 
     from lvgrid_rl.core.schemas import GridState, PQBudgetState  # noqa: PLC0415
 
-    series = ("sgen:0", "load:0")
+    series = ("sgen:0", "load:0", "heat:load:3")
     exogenous = ExogenousInput(
         t_index=0,
         series_ids=series,
-        realized_mw=np.array([-0.012, 0.004]),
-        bounds_mw=np.array([[-0.02, 0.0], [0.0, 0.01]]),
+        realized_mw=np.array([-0.012, 0.004, 0.006]),
+        bounds_mw=np.array([[-0.02, 0.0, 0.0], [0.0, 0.01, 0.02]]),
         ambient_temp_degc=12.0,
         ghi_wm2=600.0,
+        realized_ratio={"cop:load:3": 3.4},
     )
     info = InformationSet(
         t_index=0,
@@ -130,8 +131,12 @@ def _i2_context():
         measurements={},
         asset_states={},
         series_ids=series,
-        exogenous_bounds_mw=np.array([[-0.02, 0.0], [0.0, 0.01]]),
-        forecast={"sgen:0": np.array([-0.012])},
+        exogenous_bounds_mw=np.array([[-0.02, 0.0, 0.0], [0.0, 0.01, 0.02]]),
+        forecast={
+            "sgen:0": np.array([-0.012]),
+            "heat:load:3": np.array([0.006]),
+            "cop:load:3": np.array([3.4]),
+        },
         pq=PQBudgetState(windows_elapsed_count=0),
     )
     grid = GridState(
@@ -150,11 +155,13 @@ def _i2_assets():
     """One representative per asset type. New types add a line here.
 
     The actions are chosen so that the roll-out crosses the interesting
-    boundaries: the PV request exceeds what is available, and the battery is
-    asked to charge into its upper limit, then to discharge past its rated
-    power.
+    boundaries: the PV request exceeds what is available, the battery is asked
+    to charge into its upper limit, then to discharge past its rated power, and
+    the heat pump is asked for less than its minimum modulation, to fill a
+    nearly full buffer, and to switch off before its run time is over.
     """
     from lvgrid_rl.components.bess import BatteryStorage  # noqa: PLC0415
+    from lvgrid_rl.components.heat_pump import HeatPump  # noqa: PLC0415
     from lvgrid_rl.components.pv import PvSystem  # noqa: PLC0415
     from lvgrid_rl.core.schemas import AssetRatings, Interval  # noqa: PLC0415
 
@@ -174,9 +181,24 @@ def _i2_assets():
         standing_loss_mw=0.00002,
         initial_soc_frac=Interval(0.8, 0.9),
     )
+    heat_pump = HeatPump(
+        asset_id="load:3",
+        bus=3,
+        ratings=AssetRatings(p_min_mw=0.0, p_max_mw=0.004),
+        series_id="heat:load:3",
+        cop_key="cop:load:3",
+        capacity_mwh=0.028,
+        standing_loss_mw=0.00028,
+        initial_buffer_frac=Interval(0.6, 0.7),
+    )
     pv_actions = [np.array([v]) for v in (-0.02, -0.006, 0.0, -0.015, -0.01, -0.02)]
+    hp_actions = [np.array([v]) for v in (0.0005, 0.004, 0.004, 0.0, 0.0, 0.002)]
     battery_actions = [np.array([v]) for v in (0.005, 0.005, 0.004, -0.008, -0.003, 0.0)]
-    return [("pv", pv, pv_actions), ("battery", battery, battery_actions)]
+    return [
+        ("pv", pv, pv_actions),
+        ("battery", battery, battery_actions),
+        ("heat_pump", heat_pump, hp_actions),
+    ]
 
 
 def _i2_step(asset, state, action, context, hold_min=15, dt_min=5):
