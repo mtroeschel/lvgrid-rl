@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from lvgrid_rl.components.bess import BatteryState, BatteryStorage
+from lvgrid_rl.components.ev_charger import EvCharger, EvChargerState
 from lvgrid_rl.components.heat_pump import HeatPump, HeatPumpState
 from lvgrid_rl.components.pv import PvState, PvSystem
 from lvgrid_rl.core import information
@@ -32,6 +33,7 @@ from lvgrid_rl.core.protocols import (
 )
 from lvgrid_rl.core.schemas import (
     AssetRatings,
+    EvSession,
     ExogenousInput,
     GridState,
     Interval,
@@ -102,6 +104,9 @@ SCHEMA_TYPES = [
     BatteryStorage,
     HeatPumpState,
     HeatPump,
+    EvSession,
+    EvChargerState,
+    EvCharger,
 ]
 
 # Fields without a physical unit: indices, names, flags, nested schemas.
@@ -135,6 +140,10 @@ UNITLESS_FIELDS = {
     "mode",
     "cop_key",
     "running",
+    "connected",
+    "ev_sessions",
+    "arrival_t_index",  # step indices, like t_index
+    "departure_t_index",
 }
 
 

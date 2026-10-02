@@ -35,6 +35,7 @@ __all__ = [
     "freeze_array",
     "Interval",
     "AssetRatings",
+    "EvSession",
     "ExogenousInput",
     "GridState",
     "PQWindowState",
@@ -124,6 +125,28 @@ class AssetRatings:
 
 
 @dataclass(frozen=True, slots=True)
+class EvSession:
+    """A vehicle at a charge point: when it came, when it leaves, what it needs.
+
+    Args:
+        arrival_t_index: First step at which the vehicle is connected.
+        departure_t_index: First step at which it is gone (exclusive).
+        energy_mwh: Grid-side energy it wants by departure, announced at
+            arrival.
+    """
+
+    arrival_t_index: int
+    departure_t_index: int
+    energy_mwh: float
+
+    def __post_init__(self) -> None:
+        if self.departure_t_index <= self.arrival_t_index:
+            raise ValueError("a session must end after it starts")
+        if self.energy_mwh < 0.0:
+            raise ValueError("energy_mwh must not be negative")
+
+
+@dataclass(frozen=True, slots=True)
 class ExogenousInput:
     """Uncontrollable input quantities for one time step.
 
@@ -146,6 +169,10 @@ class ExogenousInput:
             coefficient of performance of a heat pump (``"cop:load:13"``). Kept
             apart from ``realized_mw`` because they are not powers: a COP in a
             power array would carry the wrong unit and enter power bounds.
+        ev_sessions: The session under way at each charge point, by asset id;
+            a charge point without a vehicle has no entry. Sessions are events,
+            not powers: what a charge point draws is decided by the controller
+            within what the vehicle still needs.
     """
 
     t_index: int
@@ -155,6 +182,7 @@ class ExogenousInput:
     ambient_temp_degc: float
     ghi_wm2: float
     realized_ratio: Mapping[str, float] = field(default_factory=dict)
+    ev_sessions: Mapping[str, EvSession] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         n = len(self.series_ids)
@@ -184,6 +212,7 @@ class ExogenousInput:
         # input afterwards; the asset models must not write to it either, which
         # the invariant I2 test checks.
         object.__setattr__(self, "realized_ratio", dict(self.realized_ratio))
+        object.__setattr__(self, "ev_sessions", dict(self.ev_sessions))
 
     def bound_of(self, series_id: str) -> Interval:
         """Bounds of a single time series."""

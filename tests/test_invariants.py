@@ -113,7 +113,11 @@ def _i2_context():
     """Exogenous input, information set and grid state shared by all cases."""
     from datetime import UTC, datetime  # noqa: PLC0415
 
-    from lvgrid_rl.core.schemas import GridState, PQBudgetState  # noqa: PLC0415
+    from lvgrid_rl.core.schemas import (  # noqa: PLC0415
+        EvSession,
+        GridState,
+        PQBudgetState,
+    )
 
     series = ("sgen:0", "load:0", "heat:load:3")
     exogenous = ExogenousInput(
@@ -124,6 +128,9 @@ def _i2_context():
         ambient_temp_degc=12.0,
         ghi_wm2=600.0,
         realized_ratio={"cop:load:3": 3.4},
+        # Arrived at step 0, leaves at step 40, wants 6 kWh: the roll-out
+        # crosses the arrival, charging and a completed session.
+        ev_sessions={"load:7": EvSession(0, 40, 0.006)},
     )
     info = InformationSet(
         t_index=0,
@@ -158,9 +165,12 @@ def _i2_assets():
     boundaries: the PV request exceeds what is available, the battery is asked
     to charge into its upper limit, then to discharge past its rated power, and
     the heat pump is asked for less than its minimum modulation, to fill a
-    nearly full buffer, and to switch off before its run time is over.
+    nearly full buffer, and to switch off before its run time is over. The
+    charge point is offered more than its rating, then nothing, then more than
+    the vehicle still needs.
     """
     from lvgrid_rl.components.bess import BatteryStorage  # noqa: PLC0415
+    from lvgrid_rl.components.ev_charger import EvCharger  # noqa: PLC0415
     from lvgrid_rl.components.heat_pump import HeatPump  # noqa: PLC0415
     from lvgrid_rl.components.pv import PvSystem  # noqa: PLC0415
     from lvgrid_rl.core.schemas import AssetRatings, Interval  # noqa: PLC0415
@@ -191,6 +201,12 @@ def _i2_assets():
         standing_loss_mw=0.00028,
         initial_buffer_frac=Interval(0.6, 0.7),
     )
+    charger = EvCharger(
+        asset_id="load:7",
+        bus=4,
+        ratings=AssetRatings(p_min_mw=0.0, p_max_mw=0.011),
+    )
+    ev_actions = [np.array([v]) for v in (0.02, 0.0, 0.004, 0.011, 0.011, 0.0037)]
     pv_actions = [np.array([v]) for v in (-0.02, -0.006, 0.0, -0.015, -0.01, -0.02)]
     hp_actions = [np.array([v]) for v in (0.0005, 0.004, 0.004, 0.0, 0.0, 0.002)]
     battery_actions = [np.array([v]) for v in (0.005, 0.005, 0.004, -0.008, -0.003, 0.0)]
@@ -198,6 +214,7 @@ def _i2_assets():
         ("pv", pv, pv_actions),
         ("battery", battery, battery_actions),
         ("heat_pump", heat_pump, hp_actions),
+        ("ev_charger", charger, ev_actions),
     ]
 
 
