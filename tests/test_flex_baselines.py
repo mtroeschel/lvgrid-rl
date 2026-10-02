@@ -226,3 +226,76 @@ def test_tuned_b5_and_b6_are_offered_only_with_flexible_assets() -> None:
     pv_only = ActionMapper.from_assets((PV,))
     assert flex_baselines(results, (0,), SimpleNamespace(mapper=pv_only)) == {}
     assert flex_baselines({}, POSITIONS, SimpleNamespace(mapper=MAPPER)) == {}
+
+
+# ---------------------------------------------------------------------------
+# PV action normalised on the available power (M4 4.6, the dead zone)
+# ---------------------------------------------------------------------------
+
+
+AVAILABLE = ActionMapper.from_assets(ASSETS, pv_normalisation="available")
+
+
+def test_available_normalisation_spans_the_available_power() -> None:
+    """-1 is full infeed of what is available, +1 none, the middle half of it."""
+    info = _info(pv_mw=-0.012)
+    pv = MAPPER.component_mask("pv", "p_mw")
+    for a, expected in ((-1.0, -0.012), (0.0, -0.006), (1.0, 0.0)):
+        action = np.zeros(AVAILABLE.dim)
+        action[pv] = a
+        assert AVAILABLE.to_physical(action, info)[pv][0] == pytest.approx(expected)
+
+
+def test_it_is_affine_and_invertible_within_one_decision() -> None:
+    info = _info(pv_mw=-0.012)
+    rng = np.random.default_rng(0)
+    for _ in range(50):
+        action = rng.uniform(-1.0, 1.0, size=AVAILABLE.dim)
+        back = AVAILABLE.to_normalised(AVAILABLE.to_physical(action, info), info)
+        assert np.allclose(back, action)
+
+
+def test_only_pv_active_power_changes_scale() -> None:
+    info = _info(pv_mw=-0.012)
+    action = np.linspace(-0.9, 0.9, AVAILABLE.dim)
+    pv = MAPPER.component_mask("pv", "p_mw")
+    rated = MAPPER.to_physical(action, info)
+    available = AVAILABLE.to_physical(action, info)
+    assert np.array_equal(rated[~pv], available[~pv])
+
+
+def test_at_night_every_pv_action_is_zero_and_maps_back_to_zero() -> None:
+    info = _info(pv_mw=0.0)
+    pv = MAPPER.component_mask("pv", "p_mw")
+    action = np.full(AVAILABLE.dim, 0.7)
+    assert AVAILABLE.to_physical(action, info)[pv][0] == 0.0
+    physical = AVAILABLE.to_physical(action, info)
+    assert AVAILABLE.to_normalised(physical, info)[pv][0] == 0.0
+
+
+def test_more_infeed_than_available_maps_to_full_infeed() -> None:
+    info = _info(pv_mw=-0.012)
+    physical = MAPPER.default_physical(info)  # neutral: the rated infeed
+    pv = MAPPER.component_mask("pv", "p_mw")
+    assert AVAILABLE.to_normalised(physical, info)[pv][0] == -1.0
+
+
+def test_available_normalisation_needs_the_information_set() -> None:
+    with pytest.raises(ValueError, match="information set"):
+        AVAILABLE.to_physical(np.zeros(AVAILABLE.dim))
+
+
+def test_rule_based_controllers_act_alike_under_both_normalisations() -> None:
+    """Their normalised actions differ, the setpoints they stand for do not."""
+    info = _info(pv_mw=-0.012, vm=1.07)
+    for controller_of in (
+        lambda m: PUDroop(m, POSITIONS, 1.04, 1.10),
+        lambda m: GreedyLocal(m, ASSETS, PUDroop(m, POSITIONS, 1.04, 1.10), LOCAL),
+    ):
+        rated = MAPPER.to_physical(controller_of(MAPPER).act(info), info)
+        available = AVAILABLE.to_physical(controller_of(AVAILABLE).act(info), info)
+        pv = MAPPER.component_mask("pv", "p_mw")
+        # The rated PV setpoint may ask for more than is available; the PV
+        # system delivers the available power either way.
+        assert np.allclose(np.maximum(rated[pv], -0.012), available[pv])
+        assert np.allclose(rated[~pv], available[~pv])

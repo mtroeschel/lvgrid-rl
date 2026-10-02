@@ -139,6 +139,21 @@ def build_parser() -> argparse.ArgumentParser:
         "their SimBench profiles as uncontrolled load",
     )
     parser.add_argument(
+        "--checkpoint-every",
+        type=int,
+        default=0,
+        help="also save the policy every this many steps, as "
+        "checkpoints/step_<n>.zip, for a learning curve evaluated afterwards "
+        "(scripts/evaluate.py --checkpoint); 0 saves only the final one",
+    )
+    parser.add_argument(
+        "--pv-normalisation",
+        default="rated",
+        choices=("rated", "available"),
+        help="scale of the PV action: rated limits (since M3) or the forecast "
+        "available power at the decision (the dead-zone remedy compared in M4 4.6)",
+    )
+    parser.add_argument(
         "--reward-mode",
         default=RewardMode.FIXED_WEIGHTS.value,
         choices=[m.value for m in RewardMode],
@@ -224,6 +239,7 @@ def main() -> None:
         else ObservationLayoutMode.FLAT
     )
     config = EnvConfig(
+        pv_normalisation=args.pv_normalisation,
         reward=RewardConfig(mode=reward_mode),
         observation=ObservationSpec(layout=obs_layout),
     )
@@ -268,6 +284,7 @@ def main() -> None:
             "heat_pumps": asdict(heat_pumps) if heat_pumps is not None else None,
             "ev": asdict(ev) if ev is not None else None,
             "obs_layout": obs_layout.value,
+            "pv_normalisation": args.pv_normalisation,
             "torch_threads": args.torch_threads,
             # Part of the hashed configuration: the dual settings decide the
             # trajectory of a Lagrangian run as much as weights decide a
@@ -297,6 +314,7 @@ def main() -> None:
                 "heat_pumps": asdict(heat_pumps) if heat_pumps is not None else None,
                 "ev": asdict(ev) if ev is not None else None,
                 "obs_layout": obs_layout.value,
+                "pv_normalisation": args.pv_normalisation,
             },
             indent=2,
             sort_keys=True,
@@ -333,6 +351,17 @@ def main() -> None:
             history_path=run_dir / "lagrangian.json",
         )
         callbacks.append(lagrangian)
+    if args.checkpoint_every > 0:
+        from stable_baselines3.common.callbacks import CheckpointCallback
+
+        # save_freq counts calls, one per vector step of all workers.
+        callbacks.append(
+            CheckpointCallback(
+                save_freq=max(args.checkpoint_every // args.workers, 1),
+                save_path=str(run_dir / "checkpoints"),
+                name_prefix="step",
+            )
+        )
     callback = CallbackList(callbacks) if callbacks else None
     started = time.perf_counter()
     model.learn(total_timesteps=args.steps, progress_bar=False, callback=callback)

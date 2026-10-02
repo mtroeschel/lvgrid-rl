@@ -265,6 +265,20 @@ def main() -> None:
         )
 
     metrics = ("pass_rate", "k95_windows", "overload_cost", "curtailed_mwh")
+    # The M4 acceptance criteria A4 and A5 (docs/results/m4-acceptance.md),
+    # where the result files carry them.
+    for row in rows:
+        if "ev_unserved_mwh" in row and "ev_deferred_mwh" in row:
+            row["ev_unserved_plus_deferred_mwh"] = (
+                row["ev_unserved_mwh"] + row["ev_deferred_mwh"]
+            )
+    m4_metrics = (
+        "ev_unserved_plus_deferred_mwh",
+        "hp_comfort_kh",
+        "bess_energy_change_mwh",
+        "hp_buffer_change_mwh",
+    )
+    metrics += tuple(m for m in m4_metrics if all(m in r for r in rows))
     aggregates = [
         aggregate_metric(m, [r[m] for r in rows], seed=args.seed) for m in metrics
     ]

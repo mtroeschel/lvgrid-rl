@@ -36,8 +36,11 @@ charge point model, is done in two parts as well: the model
 bind, `scripts/survey_undervoltage.py`) and the flexibility baselines B5
 (§14a dimming) and B6 (greedy local), tuned in the full configuration
 (`tune_baselines.py --flex`); `train.py` and `evaluate.py` add them when a run
-has flexible assets. 4.6, the acceptance runs, is next. 4.6 includes the comparison of PV action normalisation (rated against
-forecast available power, the dead zone in `docs/architecture.md` §6.3). **Invariant I2 is satisfied since 4.1**: asset dynamics
+has flexible assets. 4.6, the acceptance runs, is in progress: its questions,
+criteria and decision rules are pre-registered in
+`docs/results/m4-acceptance.md` -- do not change them in response to results.
+Phase 1 compares the PV action normalised on rated against forecast available
+power (`--pv-normalisation`) and fixes the budget; phase 2 is the acceptance. **Invariant I2 is satisfied since 4.1**: asset dynamics
 are pure functions over a frozen `AssetState`. Its test in
 `tests/test_invariants.py` is parametrised over asset types — every new asset
 model (heat pump, charge point) adds a case to `_i2_assets()`, it does not get a

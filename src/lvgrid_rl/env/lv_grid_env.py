@@ -90,6 +90,9 @@ class EnvConfig:
             special case and upper bound; the error model arrives in M5.
         observation: Observation configuration.
         reward: Reward configuration.
+        pv_normalisation: How the PV active power action is normalised,
+            ``rated`` (since M3) or ``available``
+            (:data:`~lvgrid_rl.env.actions.PV_NORMALISATIONS`).
     """
 
     sim_dt_min: int = 5
@@ -98,6 +101,7 @@ class EnvConfig:
     perfect_forecast: bool = True
     observation: ObservationSpec = field(default_factory=ObservationSpec)
     reward: RewardConfig = field(default_factory=RewardConfig)
+    pv_normalisation: str = "rated"
 
     def __post_init__(self) -> None:
         from lvgrid_rl.data.timebase import TimeBase
@@ -173,7 +177,7 @@ class LVGridEnv(gym.Env):
             self._ev_session_at[asset_id] = at
 
         self.engine = PandapowerEngine(model)
-        self.mapper = ActionMapper.from_assets(self.assets)
+        self.mapper = ActionMapper.from_assets(self.assets, self.config.pv_normalisation)
         self.steps_per_control = self.config.control_dt_min // self.config.sim_dt_min
         self.samples_per_window = 10 // self.config.sim_dt_min
         self.aggregator = PQAggregator(model.n_evaluated_buses, self.samples_per_window)
@@ -521,7 +525,7 @@ class LVGridEnv(gym.Env):
         # an accidental read of the coming interval raise rather than silently
         # produce a clairvoyant controller.
         with DecisionScope(t_decision=self._t):
-            physical = self.mapper.to_physical(np.asarray(action))
+            physical = self.mapper.to_physical(np.asarray(action), info_set)
             physical, intervention = self.safety.transform(physical, state, info_set)
             per_asset = self.mapper.split(physical)
             controlled = {
