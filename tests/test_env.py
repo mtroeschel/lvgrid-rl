@@ -734,3 +734,45 @@ def test_do_nothing_curtails_nothing_in_training_episodes() -> None:
             if truncated:
                 break
         assert curtailed == 0.0, f"seed {seed}"
+
+
+def test_rule_based_control_is_the_same_under_available_normalisation() -> None:
+    """The scale of the PV action changes what the agent learns, not the grid."""
+    from lvgrid_rl.baselines.methods import (
+        DoNothing,
+        FixedCap,
+        PUDroop,
+        asset_bus_positions,
+    )
+    from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
+    from lvgrid_rl.env.factory import make_env
+    from lvgrid_rl.env.lv_grid_env import EnvConfig
+
+    spec = EpisodeSpec(mode=EpisodeMode.TRAIN, length_days=1, randomise_budget=False)
+    totals = {}
+    for mode in ("rated", "available"):
+        env = make_env(
+            seed=3,
+            set_name="test",
+            episode_spec=spec,
+            config=EnvConfig(pv_normalisation=mode),
+        )
+        positions = asset_bus_positions(env)
+        for name, controller in (
+            ("do_nothing", DoNothing(env.mapper)),
+            ("p_u_droop", PUDroop(env.mapper, positions, 1.04, 1.10)),
+            ("fixed_cap", FixedCap(env.mapper, cap=0.1)),
+        ):
+            env.reset(seed=3)
+            curtailed = overload = 0.0
+            while True:
+                info_set = env._information_set(env._t, env._last_grid)  # noqa: SLF001
+                *_, truncated, info = env.step(controller.act(info_set))
+                curtailed += info["curtailed_energy_mwh"]
+                overload += info["cost/thermal_overload"]
+                if truncated:
+                    break
+            totals[(mode, name)] = (curtailed, overload)
+    for name in ("do_nothing", "p_u_droop", "fixed_cap"):
+        assert totals[("available", name)] == pytest.approx(totals[("rated", name)])
+    assert totals[("rated", "fixed_cap")][0] > 0.0, "the cap must curtail here"

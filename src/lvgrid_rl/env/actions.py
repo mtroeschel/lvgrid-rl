@@ -23,7 +23,16 @@ import numpy as np
 
 from lvgrid_rl.core.protocols import ActionSpec
 
-__all__ = ["ActionMapper"]
+__all__ = ["ActionMapper", "PV_NORMALISATIONS"]
+
+PV_NORMALISATIONS = ("rated", "available")
+"""How a PV system's active power action is normalised.
+
+``rated``: on its rated limits, the mapping since M3. ``available``: on the
+power the forecast says is available at the decision, ``-1`` full infeed and
+``+1`` none -- still a power, affine and invertible, but its scale depends on
+the information set. The candidate remedy for the PV dead zone (architecture
+§6.3), compared against ``rated`` before the M4 acceptance runs."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,8 +63,17 @@ class ActionMapper:
     assets: tuple | None = None
     """The assets themselves, for those whose idle behaviour is a controller of
     their own (``default_action``); ``None`` for hand-built mappers."""
+    pv_normalisation: str = "rated"
+    """See :data:`PV_NORMALISATIONS`."""
 
     def __post_init__(self) -> None:
+        if self.pv_normalisation not in PV_NORMALISATIONS:
+            raise ValueError(
+                f"pv_normalisation must be one of {PV_NORMALISATIONS}, "
+                f"not {self.pv_normalisation!r}"
+            )
+        if self.pv_normalisation == "available" and self.assets is None:
+            raise ValueError("pv_normalisation 'available' needs the assets")
         if len(self.asset_ids) != len(self.specs):
             raise ValueError("asset_ids and specs must have equal length")
         if self.kinds is not None and len(self.kinds) != len(self.asset_ids):
@@ -64,13 +82,16 @@ class ActionMapper:
             raise ValueError("asset_ids must be unique")
 
     @classmethod
-    def from_assets(cls, assets: Sequence) -> ActionMapper:
+    def from_assets(
+        cls, assets: Sequence, pv_normalisation: str = "rated"
+    ) -> ActionMapper:
         """Build the mapper from a sequence of assets, preserving their order."""
         return cls(
             asset_ids=tuple(a.asset_id for a in assets),
             specs=tuple(a.action_spec() for a in assets),
             kinds=tuple(a.kind for a in assets),
             assets=tuple(assets),
+            pv_normalisation=pv_normalisation,
         )
 
     def default_physical(self, info=None) -> np.ndarray:
@@ -162,7 +183,34 @@ class ActionMapper:
             for name in spec.names
         )
 
-    def to_physical(self, normalised: np.ndarray) -> np.ndarray:
+    def _scale(self, info) -> tuple[np.ndarray, np.ndarray]:
+        """Lower and upper ends of the normalisation, per component.
+
+        The rated limits, except under ``available`` normalisation, where a PV
+        system's active power runs from its forecast available power (full
+        infeed) to zero.
+        """
+        lower, upper = self.lower, self.upper
+        if self.pv_normalisation == "rated":
+            return lower, upper
+        if info is None:
+            raise ValueError(
+                "pv_normalisation 'available' needs the information set: the "
+                "scale of a PV action is the power available at the decision"
+            )
+        lower = lower.copy()
+        cursor = 0
+        for asset, spec in zip(self.assets, self.specs, strict=True):
+            if asset.kind == "pv":
+                for offset, name in enumerate(spec.names):
+                    if name == "p_mw":
+                        available = float(info.forecast[asset.series_id][0])
+                        bound = spec.bounds[offset]
+                        lower[cursor + offset] = min(max(available, bound.lo), bound.hi)
+            cursor += spec.dim
+        return lower, upper
+
+    def to_physical(self, normalised: np.ndarray, info=None) -> np.ndarray:
         """Map a normalised action in ``[-1, 1]`` onto physical units.
 
         Degenerate components, where lower and upper bound coincide, map to that
@@ -172,25 +220,30 @@ class ActionMapper:
         a = np.asarray(normalised, dtype=np.float64).reshape(-1)
         if a.shape != (self.dim,):
             raise ValueError(f"Action has shape {a.shape}, expected ({self.dim},)")
-        span = self.upper - self.lower
-        return self.lower + 0.5 * (np.clip(a, -1.0, 1.0) + 1.0) * span
+        lower, upper = self._scale(info)
+        return lower + 0.5 * (np.clip(a, -1.0, 1.0) + 1.0) * (upper - lower)
 
-    def to_normalised(self, physical: np.ndarray) -> np.ndarray:
+    def to_normalised(self, physical: np.ndarray, info=None) -> np.ndarray:
         """Inverse of :meth:`to_physical`.
 
         Degenerate components map to zero, which is the canonical representative
-        of a one-point interval.
+        of a one-point interval -- a PV system at night under ``available``
+        normalisation among them. Under ``available`` a setpoint asking for more
+        infeed than is available lies outside the scale and maps to ``-1``,
+        full infeed, which is what the PV system would deliver anyway.
         """
         p = np.asarray(physical, dtype=np.float64).reshape(-1)
         if p.shape != (self.dim,):
             raise ValueError(f"Setpoint has shape {p.shape}, expected ({self.dim},)")
-        span = self.upper - self.lower
+        lower, upper = self._scale(info)
+        span = upper - lower
         out = np.zeros_like(p)
         nondegenerate = span > 0.0
         out[nondegenerate] = (
-            2.0 * (p[nondegenerate] - self.lower[nondegenerate]) / span[nondegenerate]
-            - 1.0
+            2.0 * (p[nondegenerate] - lower[nondegenerate]) / span[nondegenerate] - 1.0
         )
+        if self.pv_normalisation == "available":
+            out = np.clip(out, -1.0, 1.0)
         return out
 
     def split(self, physical: np.ndarray) -> dict[str, np.ndarray]:
@@ -213,4 +266,4 @@ class ActionMapper:
         PV active power. Assets with a controller of their own contribute its
         action, which needs ``info`` (:meth:`default_physical`).
         """
-        return self.to_normalised(self.default_physical(info))
+        return self.to_normalised(self.default_physical(info), info)

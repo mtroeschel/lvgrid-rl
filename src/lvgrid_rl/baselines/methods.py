@@ -110,7 +110,7 @@ class FixedCap:
         Every other asset stays at its neutral setpoint -- a battery idles.
         """
         physical = _pv_rule(self.mapper, self.mapper.lower * self.cap, info)
-        return self.mapper.to_normalised(physical)
+        return self.mapper.to_normalised(physical, info)
 
 
 @dataclass
@@ -154,7 +154,7 @@ class PUDroop:
         # active power ones are used.
         per_component = np.repeat(share, [spec.dim for spec in self.mapper.specs])
         physical = _pv_rule(self.mapper, self.mapper.lower * (1.0 - per_component), info)
-        return self.mapper.to_normalised(physical)
+        return self.mapper.to_normalised(physical, info)
 
 
 @dataclass
@@ -217,7 +217,7 @@ class QUDroop:
                     # Consumer convention: absorbing reactive power is positive.
                     physical[cursor + offset] = share * bound.hi
             cursor += spec.dim
-        return self.mapper.to_normalised(physical)
+        return self.mapper.to_normalised(physical, info)
 
 
 def _pv_rule(mapper: ActionMapper, pv_values: np.ndarray, info=None) -> np.ndarray:

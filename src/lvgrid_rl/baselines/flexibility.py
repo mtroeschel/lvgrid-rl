@@ -131,16 +131,16 @@ class En14aDimming:
         elif loading >= self.loading_on_percent:
             self._active = True
 
-        physical = self.mapper.to_physical(self.droop.act(info))
+        physical = self.mapper.to_physical(self.droop.act(info), info)
         if not self._active:
-            return self.mapper.to_normalised(physical)
+            return self.mapper.to_normalised(physical, info)
         cursor = 0
         for asset, spec in zip(self.assets, self.mapper.specs, strict=True):
             if asset.kind in ("hp", "ev"):
                 cap = en14a_cap_mw(asset.kind, asset.ratings.p_max_mw)
                 physical[cursor] = min(physical[cursor], cap)
             cursor += spec.dim
-        return self.mapper.to_normalised(physical)
+        return self.mapper.to_normalised(physical, info)
 
 
 @dataclass
@@ -194,7 +194,7 @@ class GreedyLocal:
 
     def act(self, info: InformationSet) -> np.ndarray:
         """Hand out the local surplus, then cover the local load."""
-        physical = self.mapper.to_physical(self.droop.act(info))
+        physical = self.mapper.to_physical(self.droop.act(info), info)
         balance = {bus: _bus_balance(info, s) for bus, s in self.local.items()}
         surplus = {bus: max(-b, 0.0) for bus, b in balance.items()}
         offsets = np.cumsum([0] + [spec.dim for spec in self.mapper.specs])
@@ -226,7 +226,7 @@ class GreedyLocal:
                 physical[at] = self._battery(asset, state, left, balance)
                 if physical[at] > 0.0:
                     surplus[asset.bus] = left - physical[at]
-        return self.mapper.to_normalised(physical)
+        return self.mapper.to_normalised(physical, info)
 
     def _ev(self, asset, state, surplus_mw: float) -> float:
         if not state.connected:

@@ -883,7 +883,11 @@ infeed, +1 full curtailment): still a power and affine and invertible, but
 dependent on the information set, like `ActionMapper.default_physical`. It
 changes what trains, so it is not adopted on the side but compared against the
 rated normalisation with the learning-curve diagnostic before the M4
-acceptance runs (§12, 4.6).
+acceptance runs (§12, 4.6). Implemented as an option
+(`EnvConfig.pv_normalisation`, `train.py --pv-normalisation available`); rule
+based controllers pass the information set to the mapper and act identically
+under both. The comparison and its decision rule are pre-registered in
+`docs/results/m4-acceptance.md`.
 
 ### 6.4 Reward
 
@@ -1718,7 +1722,11 @@ the environment; 4.5 reference behaviour for the new assets and a survey of whet
 pump and EV load make the lower voltage limit bind; 4.6 the acceptance runs,
 preceded by a new learning-curve diagnostic because the action space grows, and
 with it the comparison of the PV action normalised on rated against forecast
-available power (the dead zone, §6.3).
+available power (the dead zone, §6.3). Questions, criteria and decision rules of
+4.6 are pre-registered in `docs/results/m4-acceptance.md`: phase 1, two
+normalisations × two seeds × 1.2 million steps with checkpoints evaluated on
+the validation weeks, decides the normalisation and the budget; phase 2, five
+seeds on the test weeks, decides acceptance against B6 and the M3 policy.
 
 *M3 is not a toy.* Under `moderate_growth` the fallback action brings loading from
 280 % to 55.6 % and voltage to 1.051 pu, so PV curtailment alone resolves both the

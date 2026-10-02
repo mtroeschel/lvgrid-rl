@@ -90,10 +90,17 @@ def main() -> None:
         "comparison table.",
     )
     parser.add_argument(
+        "--checkpoint",
+        default="final",
+        help="which saved policy to evaluate: 'final', or the stem of an "
+        "intermediate one such as step_200000_steps (train.py --checkpoint-every)",
+    )
+    parser.add_argument(
         "--out",
         type=Path,
         default=None,
-        help="output file; defaults to <run-dir>/eval/<set>.json",
+        help="output file; defaults to <run-dir>/eval/<set>.json, or "
+        "<set>-<checkpoint>.json for an intermediate checkpoint",
     )
     args = parser.parse_args()
 
@@ -103,7 +110,7 @@ def main() -> None:
     cap = tuned["fixed_cap"]["params"]["cap"]
     droop = tuned["p_u_droop"]["params"]
 
-    checkpoint = args.run_dir / "checkpoints" / "final.zip"
+    checkpoint = args.run_dir / "checkpoints" / f"{args.checkpoint}.zip"
     if not checkpoint.exists():
         raise FileNotFoundError(f"No checkpoint at {checkpoint}")
 
@@ -130,13 +137,17 @@ def main() -> None:
     stored_ev = env_record.get("ev")
     ev = EvSizing(**stored_ev) if stored_ev is not None else None
     obs_layout = ObservationLayoutMode(env_record.get("obs_layout", "flat"))
+    pv_normalisation = env_record.get("pv_normalisation", "rated")
 
     def build():
         return make_env(
             code=args.code,
             scenario=args.scenario,
             set_name=args.set_name,
-            config=EnvConfig(observation=ObservationSpec(layout=obs_layout)),
+            config=EnvConfig(
+                observation=ObservationSpec(layout=obs_layout),
+                pv_normalisation=pv_normalisation,
+            ),
             episode_spec=spec,
             seed=args.seed,
             storage=storage,
@@ -206,12 +217,19 @@ def main() -> None:
             f"{row['curtailed_mwh']:14.4f}"
         )
 
-    out = args.out or (args.run_dir / "eval" / f"{args.set_name}.json")
+    stem = (
+        args.set_name
+        if args.checkpoint == "final"
+        else f"{args.set_name}-{args.checkpoint}"
+    )
+    out = args.out or (args.run_dir / "eval" / f"{stem}.json")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
         json.dumps(
             {
                 "set": args.set_name,
+                "checkpoint": args.checkpoint,
+                "pv_normalisation": pv_normalisation,
                 "kpi_schema": KPI_SCHEMA,
                 "storage": stored,
                 "heat_pumps": stored_hp,
