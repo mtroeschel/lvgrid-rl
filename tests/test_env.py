@@ -696,3 +696,41 @@ def test_windows_beyond_the_budget_are_counted_at_the_worst_bus() -> None:
     assert count == 2
     within = LVGridEnv._windows_beyond_budget(fake([50, 32, 50]), before)  # noqa: SLF001
     assert within == 0
+
+
+def test_training_episodes_start_on_the_control_grid() -> None:
+    """Every control step then covers whole 15-minute source intervals."""
+    from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
+    from lvgrid_rl.env.factory import make_env
+
+    spec = EpisodeSpec(mode=EpisodeMode.TRAIN, length_days=2)
+    env = make_env(seed=1, episode_spec=spec)
+    rng = np.random.default_rng(0)
+    starts = [env.sampler.sample(rng).start_step for _ in range(200)]
+    assert all(s % env.steps_per_control == 0 for s in starts)
+    assert len(set(starts)) > 50, "still spread over the weeks"
+
+
+def test_do_nothing_curtails_nothing_in_training_episodes() -> None:
+    """Do nothing means no curtailment, in training as in evaluation.
+
+    Before the alignment it curtailed 46 to 97 kWh in two days whenever an
+    episode started off the 15-minute grid.
+    """
+    from lvgrid_rl.baselines.methods import DoNothing
+    from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
+    from lvgrid_rl.env.factory import make_env
+
+    spec = EpisodeSpec(mode=EpisodeMode.TRAIN, length_days=1, randomise_budget=False)
+    env = make_env(seed=1, episode_spec=spec, set_name="train")
+    for seed in range(3):
+        env.reset(seed=seed)
+        controller = DoNothing(env.mapper)
+        curtailed = 0.0
+        while True:
+            info_set = env._information_set(env._t, env._last_grid)  # noqa: SLF001
+            *_, truncated, info = env.step(controller.act(info_set))
+            curtailed += info["curtailed_energy_mwh"]
+            if truncated:
+                break
+        assert curtailed == 0.0, f"seed {seed}"

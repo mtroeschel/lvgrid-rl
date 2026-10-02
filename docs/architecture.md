@@ -661,8 +661,15 @@ scaled to the annual energy of its SimBench curve in the scenario, so the
 uncontrolled grid keeps the dataset's EV energy and gets the vehicles' timing.
 A session under way at the start of an episode keeps the share of its energy
 that lies ahead, pro rata over the stay — the rule the session tables use at
-the edges of the year; one still under way at the end of the episode is not
-booked, so unserved energy counts departures within the episode. Rule-based
+the edges of the year. The end is treated alike: of a session still under way,
+the share before the end belongs to the episode, and what the vehicle still
+needs beyond the share after the end is reported as **deferred**
+(`ev_deferred_mwh`) — otherwise a controller charging late would move energy
+out of the assessment for free (measured in M4 4.5: a "charge as late as
+necessary" rule delivered a third less within three-day episodes than charging
+on arrival). Deferred energy is a KPI, not a reward term: in training the value
+function bootstraps past a truncation, and a penalty would count the future
+twice. Unserved energy counts departures within the episode. Rule-based
 controllers and `do_nothing` offer the full rating (uncontrolled charging).
 `ev_unserved` (−100 per MWh, §6.4) enters the reward; unserved energy, energy
 charged and sessions ended short are KPIs. The observation gains, per charge
@@ -1048,7 +1055,16 @@ under the chronological split.
   budget and the remaining duration of the current week are drawn at random. The
   agent then sees every budget regime without week-long episodes. The evaluation
   set, by contrast, contains **complete calendar weeks with a zero initial
-  budget**, so the reported KPI is standard-conforming.
+  budget**, so the reported KPI is standard-conforming. Training episodes
+  **start on the control grid** (since M4 4.5), so every control step covers
+  whole source intervals; before, two thirds of them put a jump of the
+  15-minute data inside every control step, and the PV setpoint limited to the
+  first sub-step's available power curtailed what rose in the next — 46 to
+  97 kWh in two days under `do_nothing`. Evaluation weeks were always aligned.
+- **What storage holds at the end is reported.** The change in battery and
+  heat pump buffer energy over an episode (`bess_energy_change_mwh`,
+  `hp_buffer_change_mwh`) is a KPI: evaluation weeks start at fixed fill levels,
+  and a controller that ends them empty has borrowed from the next week.
 - **Discounting is not a free choice.** The effective horizon `1/(1−γ)` must cover
   the criterion horizon. At `control_dt = 15 min` a week is 672 decisions → `γ ≈
   0.997`; at 5 min it is 2016 → `γ ≈ 0.999`. Configuration validation derives a
