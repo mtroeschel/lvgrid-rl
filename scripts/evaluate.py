@@ -21,6 +21,7 @@ import json
 from pathlib import Path
 
 from lvgrid_rl.agents.policy_controller import PolicyController
+from lvgrid_rl.baselines.flexibility import flex_baselines
 from lvgrid_rl.baselines.methods import (
     DoNothing,
     FixedCap,
@@ -156,6 +157,8 @@ def main() -> None:
                 ),
             }
         )
+        # B5 and B6, when the run has flexible assets and they are tuned.
+        controllers.update(flex_baselines(tuned, positions, build()))
 
     rows = []
     for name, build_controller in controllers.items():

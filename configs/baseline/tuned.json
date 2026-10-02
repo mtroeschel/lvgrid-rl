@@ -1,13 +1,49 @@
 {
   "days_per_episode": 3,
+  "flex_days_per_episode": 3,
+  "flex_note": "B5/B6: full M4 assets, PV on the tuned P(U); lexicographic on violating windows, overload integral, then curtailment + unserved and deferred EV energy + comfort at the reward weights.",
+  "flex_weeks": 8,
   "note": "Tuned on the validation weeks with a lexicographic objective: violating assessment windows first, curtailed energy second.",
   "pv_mode": "p_only",
   "results": {
+    "en14a_dimming": {
+      "assets": "storage, heat pumps, charge points (M4 defaults)",
+      "cost": 0.5032643825414,
+      "k95": 0.0,
+      "overload": 13.739487897690136,
+      "overload_tolerance_frac": 0.01,
+      "params": {
+        "loading_on_percent": 70.0
+      },
+      "pv_rule": {
+        "p_u_droop": {
+          "v_max": 1.1,
+          "v_start": 1.04
+        }
+      }
+    },
     "fixed_cap": {
       "curtailed": 0.9046795317556624,
       "k95": 0.0,
       "params": {
         "cap": 0.4
+      }
+    },
+    "greedy_local": {
+      "assets": "storage, heat pumps, charge points (M4 defaults)",
+      "cost": 1.7667621829906004,
+      "k95": 0.0,
+      "overload": 5.183575069298208,
+      "overload_tolerance_frac": 0.01,
+      "params": {
+        "margin_h": 2.0,
+        "surplus_threshold_frac": 0.2
+      },
+      "pv_rule": {
+        "p_u_droop": {
+          "v_max": 1.1,
+          "v_start": 1.04
+        }
       }
     },
     "p_u_droop": {
