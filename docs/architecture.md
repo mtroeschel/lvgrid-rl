@@ -626,6 +626,28 @@ boundaries lose correlations longer than a week, such as a holiday across two.
 Weather is the 2016 German series; the first and last partial weeks reuse the
 temperatures of the same calendar days in 2016.
 
+*Model (`components/ev_charger.py`, M4 4.4b).* The **action is the power offered
+to the vehicle**, as a charge point offers it through the control pilot
+(IEC 61851): an upper limit the vehicle draws up to while it still needs energy.
+Without a vehicle, or with one that needs nothing more, the point draws nothing;
+like PV's available power this is not reported as clipping — it is not the
+controller proposing the inadmissible but the vehicle not taking it — and only a
+request beyond the rating is clipped. For the shield (M9) the setpoint is an
+upper bound of the injection. The neutral action, uncontrolled charging, is the
+full rating offered all the time: emobpy's `immediate` strategy, which the
+sessions come from. Sessions reach the model only through the exogenous input
+(`ExogenousInput.ev_sessions`, an `EvSession` of arrival, departure and energy
+per charge point while a vehicle is there); at arrival the state takes over the
+announced energy and departure, and counts down to it. That the departure is
+known from arrival is an assumption, the upper bound of what a controller can
+know. Energy still missing at departure is **unserved**, booked in the last
+step of the session; the vehicle leaves on time either way and the model does
+not top up on its own, so what is delivered is the controller's doing. The
+model works on grid-side energy throughout (the sessions are `charge_grid`), so
+it needs neither battery capacity nor efficiency. No vehicle-to-grid. A session
+under way when an episode starts is set by the environment
+(`EvCharger.connected_state`).
+
 ---
 
 ## 6. L3 — Gymnasium environment

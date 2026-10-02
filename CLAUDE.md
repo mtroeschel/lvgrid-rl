@@ -30,7 +30,9 @@ asset) is done: the per-asset observation layout and `SharedAssetPolicy`
 two parts, both done: the when2heat adapter (4.3a) and the model with its place
 in the environment (4.3b, `train.py --heat-pumps`). 4.4, EV sessions (D17, emobpy; superseding D16), is in two parts: 4.4a, the
 sessions, is done (`tools/emobpy/`, `data/sources/ev_sessions.py`); 4.4b, the
-charge point model, is next. **Invariant I2 is satisfied since 4.1**: asset dynamics
+charge point model, is in two parts as well: the model
+(`components/ev_charger.py`, I2 case added) is done, its place in the
+environment is next. **Invariant I2 is satisfied since 4.1**: asset dynamics
 are pure functions over a frozen `AssetState`. Its test in
 `tests/test_invariants.py` is parametrised over asset types — every new asset
 model (heat pump, charge point) adds a case to `_i2_assets()`, it does not get a
