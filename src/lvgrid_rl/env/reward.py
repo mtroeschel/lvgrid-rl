@@ -69,6 +69,13 @@ class RewardConfig:
             # The architecture's starting value (section 6.4): one Kh weighs as
             # much as two MWh of curtailment, which is heavy, and not calibrated.
             "hp_comfort": TermSpec(weight=-2.0),
+            # Per MWh a vehicle still wanted when it left, summed over charge
+            # points. Set to the same order as hp_comfort: an hour's heat
+            # deficit of one kWh in a buffer of the grid's size costs about
+            # 0.17 there, a missing kWh 0.1 here -- a hundred times curtailment.
+            # A starting value, not calibrated; revisited with hp_comfort
+            # before the M4 acceptance runs.
+            "ev_unserved": TermSpec(weight=-100.0),
             "action_smoothness": TermSpec(weight=-0.05),
             "grid_losses": TermSpec(weight=-0.1),
         }
@@ -175,6 +182,7 @@ class RewardComposer:
         windows_per_step: float,
         storage_throughput_mwh: float,
         hp_comfort_kh: float = 0.0,
+        ev_unserved_mwh: float = 0.0,
     ) -> RewardBreakdown:
         """Evaluate the reward for one control step.
 
@@ -204,6 +212,8 @@ class RewardComposer:
                 charging and discharging, for the degradation term.
             hp_comfort_kh: Temperature below the buffer bands, integrated over
                 the step and summed over heat pumps.
+            ev_unserved_mwh: Energy vehicles still wanted when they left during
+                the step, summed over charge points.
 
         **What the costs mean.** The voltage costs are *rates*: the violating
         windows at the worst bus of the step, divided by the windows a step
@@ -242,6 +252,7 @@ class RewardComposer:
             "pv_curtailment": curtailed_energy_mwh,
             "bess_degradation": storage_throughput_mwh,
             "hp_comfort": hp_comfort_kh,
+            "ev_unserved": ev_unserved_mwh,
             "action_smoothness": float(setpoint_change_mw),
             "grid_losses": metrics.losses_mw * dt_hours,
         }

@@ -38,6 +38,7 @@ from lvgrid_rl.core.protocols import (
 )
 from lvgrid_rl.core.schemas import (
     AssetState,
+    EvSession,
     ExogenousInput,
     GridState,
     SystemState,
@@ -134,6 +135,7 @@ class LVGridEnv(gym.Env):
         safety: SafetyComponent | None = None,
         seed: int | None = None,
         ratio_series: Mapping[str, np.ndarray] | None = None,
+        ev_sessions: Mapping[str, Any] | None = None,
     ) -> None:
         self.model = model
         self.assets = tuple(assets)
@@ -152,6 +154,23 @@ class LVGridEnv(gym.Env):
         self._ratio_series = {
             k: np.asarray(v, dtype=np.float64) for k, v in (ratio_series or {}).items()
         }
+        # Charge point sessions as events: per charge point the sessions, and
+        # per step which of them is under way (-1 for none). They reach the
+        # charge point through the exogenous input only (I3).
+        self._ev_sessions: dict[str, tuple[EvSession, ...]] = {}
+        self._ev_session_at: dict[str, np.ndarray] = {}
+        for asset_id, table in (ev_sessions or {}).items():
+            events = tuple(
+                EvSession(int(a), int(d), float(e))
+                for a, d, e in zip(
+                    table.arrival, table.departure, table.energy_mwh, strict=True
+                )
+            )
+            at = np.full(len(profiles), -1, dtype=np.int64)
+            for k, event in enumerate(events):
+                at[event.arrival_t_index : event.departure_t_index] = k
+            self._ev_sessions[asset_id] = events
+            self._ev_session_at[asset_id] = at
 
         self.engine = PandapowerEngine(model)
         self.mapper = ActionMapper.from_assets(self.assets)
@@ -178,6 +197,15 @@ class LVGridEnv(gym.Env):
                     (a.asset_id, a.capacity_mwh, a.cop_key)
                     for a in self.assets
                     if a.kind == "hp"
+                ),
+            )
+        if not observation_spec.ev_assets:
+            observation_spec = replace(
+                observation_spec,
+                ev_assets=tuple(
+                    (a.asset_id, a.ratings.p_max_mw)
+                    for a in self.assets
+                    if a.kind == "ev"
                 ),
             )
         if not observation_spec.storage_assets:
@@ -304,7 +332,38 @@ class LVGridEnv(gym.Env):
             ambient_temp_degc=0.0,
             ghi_wm2=0.0,
             realized_ratio={k: float(v[t]) for k, v in self._ratio_series.items()},
+            ev_sessions=self._ev_sessions_at(t),
         )
+
+    def _ev_sessions_at(self, t: int) -> dict[str, EvSession]:
+        """The session under way at each charge point at step ``t``."""
+        out = {}
+        for asset_id, at in self._ev_session_at.items():
+            k = int(at[t])
+            if k >= 0:
+                out[asset_id] = self._ev_sessions[asset_id][k]
+        return out
+
+    def _ev_states_at_start(self, t: int) -> None:
+        """Connect the vehicles whose sessions are under way when an episode starts.
+
+        A session that began before the episode keeps the share of its energy
+        that falls into the part still ahead, pro rata over the stay -- the rule
+        the session tables use at the edges of the year. A session arriving at
+        the first step is picked up by the charge point itself.
+        """
+        for asset in self.assets:
+            if asset.kind != "ev":
+                continue
+            session = self._ev_sessions_at(t).get(asset.asset_id)
+            if session is None or session.arrival_t_index >= t:
+                continue
+            ahead = (session.departure_t_index - t) / (
+                session.departure_t_index - session.arrival_t_index
+            )
+            self._asset_states[asset.asset_id] = asset.connected_state(
+                session, t, session.energy_mwh * ahead, self.config.sim_dt_min
+            )
 
     def _forecast(self, t: int) -> dict[str, np.ndarray]:
         """Forecast per controllable series.
@@ -389,6 +448,7 @@ class LVGridEnv(gym.Env):
         self._asset_states = {
             asset.asset_id: asset.initial_state(self._rng) for asset in self.assets
         }
+        self._ev_states_at_start(self._t)
 
         setpoints = self._setpoints_for(self._t)
         for asset in self.assets:
@@ -484,6 +544,9 @@ class LVGridEnv(gym.Env):
         comfort_kh = 0.0
         unserved_heat_mwh = 0.0
         hp_switches = 0
+        ev_unserved_mwh = 0.0
+        ev_charged_mwh = 0.0
+        ev_sessions_short = 0
         inner_steps = 0
 
         for _ in range(self.steps_per_control):
@@ -541,6 +604,10 @@ class LVGridEnv(gym.Env):
                     comfort_kh += outcome.comfort_deviation_kh
                     unserved_heat_mwh += outcome.unserved_energy_mwh
                     hp_switches += outcome.switching_count
+                if asset.kind == "ev":
+                    ev_unserved_mwh += outcome.unserved_energy_mwh
+                    ev_charged_mwh += outcome.throughput_energy_mwh
+                    ev_sessions_short += int(outcome.unserved_energy_mwh > 1e-9)
                 for key in applied[asset.asset_id].clipping_info:
                     if key not in controlled[asset.asset_id].clipping_info:
                         physics_limited.add((asset.asset_id, f"{asset.kind}/{key}"))
@@ -595,6 +662,7 @@ class LVGridEnv(gym.Env):
             windows_per_step=self.config.control_dt_min / 10,
             storage_throughput_mwh=throughput_mwh,
             hp_comfort_kh=comfort_kh,
+            ev_unserved_mwh=ev_unserved_mwh,
         )
         reward_total = step_reward.total
         breakdown_terms = dict(step_reward.terms)
@@ -643,6 +711,9 @@ class LVGridEnv(gym.Env):
             "hp_comfort_kh": comfort_kh,
             "hp_unserved_heat_mwh": unserved_heat_mwh,
             "hp_switches": hp_switches,
+            "ev_unserved_mwh": ev_unserved_mwh,
+            "ev_charged_mwh": ev_charged_mwh,
+            "ev_sessions_short": ev_sessions_short,
         }
         # A limitation applied by the physics inside the hold (the battery
         # management cut-off) counts once per asset and control step, like one

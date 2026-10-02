@@ -630,9 +630,11 @@ temperatures of the same calendar days in 2016.
 to the vehicle**, as a charge point offers it through the control pilot
 (IEC 61851): an upper limit the vehicle draws up to while it still needs energy.
 Without a vehicle, or with one that needs nothing more, the point draws nothing;
-like PV's available power this is not reported as clipping — it is not the
-controller proposing the inadmissible but the vehicle not taking it — and only a
-request beyond the rating is clipped. For the shield (M9) the setpoint is an
+this is not reported as clipping — it is not the controller proposing the
+inadmissible but the vehicle not taking it, as PV's `limit_to_physics` treats the
+weather — and only a request beyond the rating is clipped. (PV's `to_setpoint`
+does report the gap to the forecast available power, so `do_nothing` counts as
+clipped in every step with PV; the charge point does not follow that.) For the shield (M9) the setpoint is an
 upper bound of the injection. The neutral action, uncontrolled charging, is the
 full rating offered all the time: emobpy's `immediate` strategy, which the
 sessions come from. Sessions reach the model only through the exogenous input
@@ -647,6 +649,33 @@ model works on grid-side energy throughout (the sessions are `charge_grid`), so
 it needs neither battery capacity nor efficiency. No vehicle-to-grid. A session
 under way when an episode starts is set by the environment
 (`EvCharger.connected_state`).
+
+*In the environment (`make_env(ev=...)`, `train.py --ev`).* Each of the grid's
+seven `HLS_*` loads becomes an `EvCharger` at its load element and nominal power;
+its SimBench profile no longer drives the grid. Its sessions are the emobpy
+vehicle-year of that charge point, verified against the committed manifest and
+scaled to the annual energy of its SimBench curve in the scenario, so the
+uncontrolled grid keeps the dataset's EV energy and gets the vehicles' timing.
+A session under way at the start of an episode keeps the share of its energy
+that lies ahead, pro rata over the stay — the rule the session tables use at
+the edges of the year; one still under way at the end of the episode is not
+booked, so unserved energy counts departures within the episode. Rule-based
+controllers and `do_nothing` offer the full rating (uncontrolled charging).
+`ev_unserved` (−100 per MWh, §6.4) enters the reward; unserved energy, energy
+charged and sessions ended short are KPIs. The observation gains, per charge
+point, whether a vehicle is connected, its remaining need in hours of full power
+(/4) and the time to departure (/24); the per-asset block adds the laxity, the
+time charging can still wait.
+
+*Measured.* `do_nothing` on the nine test weeks, with the charge points
+controllable and therefore charging the emobpy sessions on arrival instead of
+following the SimBench curves: pass rate 0.9145 either way, 153 K95 windows
+against 141 (+12, all in weeks 12 and 33) and an overload of 122.97 against
+121.90 (+0.9 %); 1.48 MWh charged over the nine weeks, none unserved. The
+vehicles' evening arrivals coincide more with the evening peak than the
+averaged SimBench curves did, with the same energy. As with heat pumps,
+baselines are recomputed per asset configuration and `evaluate.py
+--baselines-from` refuses to mix them.
 
 ---
 
@@ -814,18 +843,28 @@ and the Lagrangian variant run from the same configuration.
 reward:
   mode: fixed_weights           # fixed_weights | lagrangian
   objective:
-    pv_curtailment:    {weight: -1.0,  unit: kWh}
-    ev_unserved:       {weight: -5.0,  unit: kWh, at: departure}
-    hp_comfort:        {weight: -2.0,  unit: Kh}
-    bess_degradation:  {weight: -0.2,  unit: MWh_throughput}  # starting value, not a calibrated cost
-    action_smoothness: {weight: -0.05}
-    grid_losses:       {weight: -0.1,  unit: kWh}
+    pv_curtailment:    {weight: -1.0,   unit: MWh}
+    ev_unserved:       {weight: -100.0, unit: MWh, at: departure}  # M4 4.4b, see below
+    hp_comfort:        {weight: -2.0,   unit: Kh}
+    bess_degradation:  {weight: -0.2,   unit: MWh_throughput}  # starting value, not a calibrated cost
+    action_smoothness: {weight: -0.05,  unit: MW_change}
+    grid_losses:       {weight: -0.1,   unit: MWh}
   constraint:
     en50160_k95:       {weight: -10.0, limit: 0.05, shaping: potential}  # per window beyond the budget
     en50160_k100:      {weight: -50.0, limit: 0.0}
     thermal_overload:  {weight: -30.0, limit: 0.0, form: hinge, limit_pct: 100}  # percent-hours / 100
   normalization: fixed_scale
 ```
+
+*Units (corrected in M4 4.4b).* Up to M4 this sketch gave curtailment and losses
+per kWh and `ev_unserved` as −5 per kWh, five times curtailment. The code has
+priced curtailment and losses **per MWh** since M3, so the sketch's ratios were
+never the implemented ones: against −1 per MWh of curtailment, −2 per Kh of
+comfort is a thousand times heavier than the sketch implied. `ev_unserved` is
+set to −100 per MWh, chosen to be of the same order as `hp_comfort` (an hour's
+heat deficit of one kWh in a buffer of the grid's size costs about 0.17, a
+missing kWh 0.1) rather than five times curtailment. Both are starting values;
+their level against curtailment is to be settled before the M4 acceptance runs.
 
 **Both constraint terms are active from M3.** The M2 survey showed that thermal
 overload is the dominant binding constraint in the reference scenarios and remains

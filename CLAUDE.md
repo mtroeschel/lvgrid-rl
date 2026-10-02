@@ -30,9 +30,10 @@ asset) is done: the per-asset observation layout and `SharedAssetPolicy`
 two parts, both done: the when2heat adapter (4.3a) and the model with its place
 in the environment (4.3b, `train.py --heat-pumps`). 4.4, EV sessions (D17, emobpy; superseding D16), is in two parts: 4.4a, the
 sessions, is done (`tools/emobpy/`, `data/sources/ev_sessions.py`); 4.4b, the
-charge point model, is in two parts as well: the model
-(`components/ev_charger.py`, I2 case added) is done, its place in the
-environment is next. **Invariant I2 is satisfied since 4.1**: asset dynamics
+charge point model, is done in two parts as well: the model
+(`components/ev_charger.py`, I2 case added) and its place in the environment
+(`train.py --ev`). 4.5, reference behaviour and the undervoltage survey, is
+next. **Invariant I2 is satisfied since 4.1**: asset dynamics
 are pure functions over a frozen `AssetState`. Its test in
 `tests/test_invariants.py` is parametrised over asset types — every new asset
 model (heat pump, charge point) adds a case to `_i2_assets()`, it does not get a
@@ -94,6 +95,11 @@ under which the multiplier can only grow.
   **Reproduce data with `--replay`** from the committed manifest
   (`configs/ev/emobpy-2016-home-only.manifest.json`), not with a fresh run:
   which seeds a fresh run keeps depends on how fast the machine is.
+- **Reward energies are in MWh**, not kWh: curtailment −1, `ev_unserved` −100
+  per MWh. Until M4 4.4b the sketch in `docs/architecture.md` §6.4 said kWh, so
+  its weight ratios were never the implemented ones; `hp_comfort` (−2 per Kh)
+  is far heavier against curtailment than the sketch suggested. Settle the
+  levels before the M4 acceptance runs.
 - **PyTorch runs with one thread** (`--torch-threads`, default 1). With the
   default pool the shared policy took 7.6 ms per decision instead of 1.0: the
   threads fall asleep during every environment step and have to be woken for

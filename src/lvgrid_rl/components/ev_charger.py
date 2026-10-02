@@ -13,11 +13,15 @@ delivered is entirely the controller's doing.
 through the control pilot (IEC 61851): an upper limit that the vehicle draws up
 to while it still needs energy. A charge point without a vehicle, or with one
 that needs nothing more, draws nothing. That is not a limitation of the action
-and is not reported as clipping -- as with PV, whose available power caps the
-infeed, it is not the controller proposing something inadmissible but the
-vehicle not being there to take it. Only a request beyond the rating is
-clipped. For the certified shield (M9) the setpoint is therefore an upper bound
-of the injection, never an underestimate.
+and is not reported as clipping: it is not the controller proposing something
+inadmissible but the vehicle not being there to take it (PV's
+``limit_to_physics`` treats the weather the same way). Only a request beyond
+the rating is clipped. Unlike PV's ``to_setpoint``, which reports the gap to the
+forecast available power as clipping -- so that ``do_nothing`` counts as clipped
+in every PV step -- the decision here is not judged against the vehicle's need,
+so uncontrolled charging is never counted as clipped. For the certified shield
+(M9) the setpoint is therefore an upper bound of the injection, never an
+underestimate.
 
 **Uncontrolled charging is the neutral action:** the full rating offered all the
 time, which is emobpy's ``immediate`` strategy that the sessions come from.
