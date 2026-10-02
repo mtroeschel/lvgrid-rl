@@ -46,6 +46,13 @@ __all__ = [
 
 FLEXIBLE_KINDS = frozenset({"bess", "hp", "ev"})
 
+_SHORT_NAMES = {
+    "loading_on_percent": "L",
+    "surplus_threshold_frac": "theta",
+    "margin_h": "m_h",
+}
+"""Parameter names in results-table labels, so that a value reads unambiguously."""
+
 EN14A_MIN_MW = 0.0042
 """Guaranteed minimum power of a controllable consumer under §14a EnWG."""
 
@@ -262,7 +269,9 @@ def flex_baselines(results: Mapping, positions: tuple[int, ...], env) -> dict:
             continue
         droop = entry["pv_rule"]["p_u_droop"]
         params = dict(entry["params"])
-        label = ",".join(str(v) for v in params.values())
+        label = ",".join(
+            f"{_SHORT_NAMES.get(key, key)}={value}" for key, value in params.items()
+        )
 
         def build(e, method=method, droop=droop, params=params):
             pv = PUDroop(e.mapper, positions, droop["v_start"], droop["v_max"])

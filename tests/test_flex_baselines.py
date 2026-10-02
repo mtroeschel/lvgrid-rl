@@ -219,7 +219,10 @@ def test_tuned_b5_and_b6_are_offered_only_with_flexible_assets() -> None:
         },
     }
     flexible = flex_baselines(results, POSITIONS, SimpleNamespace(mapper=MAPPER))
-    assert set(flexible) == {"en14a_dimming(90.0)", "greedy_local(0.2,1.0)"}
+    assert set(flexible) == {
+        "en14a_dimming(L=90.0)",
+        "greedy_local(theta=0.2,m_h=1.0)",
+    }
     pv_only = ActionMapper.from_assets((PV,))
     assert flex_baselines(results, (0,), SimpleNamespace(mapper=pv_only)) == {}
     assert flex_baselines({}, POSITIONS, SimpleNamespace(mapper=MAPPER)) == {}
