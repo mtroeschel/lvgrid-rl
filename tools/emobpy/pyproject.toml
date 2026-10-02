@@ -1,0 +1,27 @@
+# A tool, not a part of the package: generates EV mobility and home charging
+# sessions with emobpy (decision D17) and writes them to data/raw/emobpy/.
+#
+# Separate on purpose. emobpy 0.6.2 (December 2021) is unmaintained and fails
+# under numpy 2 / pandas 3, which the project uses; it runs only in this frozen
+# environment. The project itself never imports emobpy -- it reads the Parquet
+# files this tool writes, checked against the SHA-256 in their manifest.
+#
+#     cd tools/emobpy && uv sync --locked && uv run python generate.py
+[project]
+name = "lvgrid-emobpy-tool"
+version = "0.1.0"
+requires-python = "==3.9.*"
+dependencies = [
+  "emobpy==0.6.2",
+  "numpy<1.24",
+  "pandas<2",
+  "pyarrow<15",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+# The project's rules, at the Python this tool runs on (no zip(strict=...)).
+extend = "../../pyproject.toml"
+target-version = "py39"

@@ -570,27 +570,61 @@ configuration, and `evaluate.py --baselines-from` refuses to mix them.
 power is controllable between arrival and departure; energy not delivered by
 departure is booked as a penalty. V2G as a later extension, initially disabled.
 
-*Fixed for M4 (D16), replacing the emobpy plan.* emobpy 0.6.2 (December 2021)
-installs on the project's stack but fails in its first step under numpy 2 and
-pandas 3, so it could only run in a separately pinned environment. Sessions are
-instead derived the way D15 derived the heat pump demand: **arrival and energy
-from the SimBench `HLS_*` curves** — every contiguous charging block one session,
-blocks at most 15 minutes apart merged — and only the **departure from ElaadNL's
-connection-time distribution for private charging**, conditional on the hour of
-arrival. Departures are made feasible: never earlier than the energy needs at
-nominal power (25 to 37 sessions per charge point raised), never later than the
-next arrival (10 to 21 capped); both counts are reported. **Power is the nominal
-rating** of the profile, 3.7, 11 or 22 kW: `moderate_growth` multiplies the
-charge points' `p_mw` by 1.3, which turns a 22 kW wallbox into a 28.3 kW one;
-for a fixed load curve that went unnoticed, for a power limit it would be wrong,
-so the growth stays on the energy and the power is not scaled. The SimBench
-curves read as averaged expected values rather than single sessions — some 220
-blocks a year per charge point at a median of 3 to 5 kWh, and at 11 or 22 kW the
-maximum power is reached in 1 to 7 % of a block — so with overnight connection
-times small energies get long windows and the flexibility is, if anything,
-overstated. ElaadNL publishes aggregated distributions through a dashboard only;
-until its export is in place a synthetic stand-in (`synthetic_dwell`) is used and
-named as the source in every result that rests on it.
+*Fixed for M4 (D17, superseding D16).* Sessions come from **emobpy**, generated
+offline by `tools/emobpy/generate.py` in a frozen environment of its own
+(Python 3.9, emobpy 0.6.2, numpy < 1.24, pandas < 2; emobpy fails under the
+project's numpy 2 / pandas 3, and the project never imports it). One vehicle
+per charge point: driver type drawn with the MiD 2017 shares of emobpy's
+Germany case (commuters 62 %, of them 78 % full time; non-commuters 38 %),
+vehicle model drawn from the four of the emobpy paper, charging **only at home**
+at the charge point's **nominal power** (3.7 / 11 / 22 kW; the scenario's growth
+factor stays on the energy) and at fast chargers en route on trips longer than
+the battery allows — energy that never reaches the low-voltage grid. A session
+is a stay at home; its energy is what emobpy's `immediate` strategy draws from
+the grid during it. Energies are **scaled to each charge point's SimBench
+annual energy**, so the emobpy vehicles provide the structure and the grid
+dataset the level.
+
+D16 had taken arrival and energy from the SimBench `HLS_*` blocks and only the
+departure from ElaadNL. Two things ended it: ElaadNL offers no distribution
+file, only a profile generator; and the SimBench blocks read as averaged
+expected values rather than sessions (some 220 a year per charge point at a
+median of 3 to 5 kWh), so their flexibility would have been overstated.
+
+*Three workarounds, recorded in the run manifest.* `emobpy.tools.set_seed` seeds
+only numba's generator while the mobility model draws from numpy's global one —
+the same seed gave different results — so the tool seeds the global generators
+as well (verified: identical output). emobpy samples daily tours until its
+rules hold, without an iteration limit; a commuter year had not finished after
+30 minutes, so mobility is generated **week by week** under a time limit of ten
+minutes. A week over the limit (or one that fails) is **retried with the next
+seed**: in the 2016 run 51 of 265 full-time commuter weeks needed one (46 once,
+5 twice; 55 time-outs, 1 failure) and 2 of 106 non-commuter weeks (failures).
+The retry keeps only weeks emobpy can produce — what an unlimited run would
+also deliver if it ever finished — but it is a selection, and every attempt is
+in the manifest. The state of charge carries over from week to week; every week
+starts and ends at home. Because the time limit depends on the machine, a run
+is reproduced with `--replay`, which takes every week's successful seed from
+its manifest and runs it without a limit. A comparison of two fresh runs found
+that the charging step was unseeded as well (emobpy draws the fast charger en
+route from numpy's global generator); it is now seeded with the week's seed. Two replays of the 2016 run, on 6 and 12 workers, gave
+bit-identical files.
+
+*The 2016 run* (`data/raw/emobpy/2016-home-only`, seven charge points). The
+draw gave five full-time commuters and two non-commuters — no part-time driver,
+which at a share of 14 % happens for seven charge points with probability 0.36.
+Per charge point 244 to 299 sessions a year, a median stay of 15 to 19 hours
+and a median arrival at 17 to 18 h local. emobpy's home energy is 1.4 to
+2.4 MWh a year (8,800 to 10,700 km), the SimBench curves 1.0 to 1.36 MWh, so
+the **scale factors are 0.56 to 0.71** — the vehicles are scaled down, and no
+session had to be capped to fit. Fast charging en route took 451 to 1,110 kWh
+a year that never reaches the low-voltage grid.
+
+*Limitations.* emobpy is a model of mobility, not a measurement of charging;
+nothing here is calibrated against observed charging sessions. Week
+boundaries lose correlations longer than a week, such as a holiday across two.
+Weather is the 2016 German series; the first and last partial weeks reuse the
+temperatures of the same calendar days in 2016.
 
 ---
 
@@ -1515,7 +1549,7 @@ controllers that leave them idle), 4.2b is action mode 2, whose encoder is a
 design decision of its own. 4.3 the heat pump, again in two: 4.3a the when2heat
 data adapter and the thermal demand, 4.3b the model with buffer store and its
 place in the environment; 4.4 EV sessions, also in two: 4.4a the sessions
-(D16, replacing the emobpy plan), 4.4b the charge point model and its place in
+(D17, emobpy, superseding D16), 4.4b the charge point model and its place in
 the environment; 4.5 reference behaviour for the new assets and a survey of whether heat
 pump and EV load make the lower voltage limit bind; 4.6 the acceptance runs,
 preceded by a new learning-curve diagnostic because the action space grows.
@@ -1614,7 +1648,8 @@ finished shield, and M9 is additive.
 | D13 | evaluation split | **stratified week split with an embargo** instead of a chronological block; stress weeks and a held-out month reported separately | §6.5 |
 | D14 | action mode 2 | **weights shared per asset kind, individual setpoint per asset**, instead of a parameter vector per kind decoded by a characteristic: keeps the action space affine and invertible (I4) and so compatible with the certified arm, and matches the operational use case of a setpoint per asset | §6.3 |
 | D15 | heat pump, stage 1 | **thermal demand = SimBench electrical profile × when2heat COP** (2016, source by profile, floor sink); **modulating 30–100 % or off, with minimum run and idle times**; **buffer of two hours of rated thermal output** | §5 |
-| D16 | EV sessions | **arrival and energy from the SimBench `HLS_*` blocks, departure from ElaadNL private-charging connection times** (conditional on arrival hour), made feasible and counted; **nominal power** 3.7 / 11 / 22 kW, scenario growth on the energy only; replaces emobpy, which fails on the current stack | §5 |
+| D16 | EV sessions (superseded by D17) | **arrival and energy from the SimBench `HLS_*` blocks, departure from ElaadNL private-charging connection times** (conditional on arrival hour), made feasible and counted; **nominal power** 3.7 / 11 / 22 kW, scenario growth on the energy only; replaces emobpy, which fails on the current stack | §5 |
+| D17 | EV sessions | **emobpy vehicle-years** (MiD 2017, driver type and vehicle model drawn per charge point), generated offline in a frozen environment; **home charging only**, fast charging en route; sessions are stays at home with emobpy's immediate energy, **scaled to the SimBench annual energy**; nominal power; weekly generation with time limit and documented retries | §5 |
 
 ### 13.1 What D2 actually costs
 
