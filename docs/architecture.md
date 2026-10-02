@@ -413,7 +413,10 @@ class FlexAsset(Protocol):
     def to_setpoint(self, s, action, info, hold_min) -> Setpoint:
         # action -> (p_mw, q_mvar), projected onto what can be held for the
         # control step. Every limitation is reported in Setpoint.clipping_info,
-        # never applied silently.
+        # never applied silently. An action that is a cap (PV infeed limit, the
+        # power offered to a vehicle) is not limited when the asset cannot use
+        # all of it: a cap above what is available means "do not curtail",
+        # and its effect is recorded as curtailed or charged energy.
         ...
 
     def limit_to_physics(self, s, sp, x, dt_min) -> Setpoint:
@@ -632,10 +635,10 @@ to the vehicle**, as a charge point offers it through the control pilot
 Without a vehicle, or with one that needs nothing more, the point draws nothing;
 this is not reported as clipping — it is not the controller proposing the
 inadmissible but the vehicle not taking it, as PV's `limit_to_physics` treats the
-weather — and only a request beyond the rating is clipped. (PV's `to_setpoint`
-does report the gap to the forecast available power, so `do_nothing` counts as
-clipped in every step with PV; the charge point does not follow that.) For the shield (M9) the setpoint is an
-upper bound of the injection. The neutral action, uncontrolled charging, is the
+weather — and only a request beyond the rating is clipped, as for PV since
+M4. (Until then PV's `to_setpoint` reported the gap to the forecast available
+power as clipping, so `do_nothing` counted as clipped in every step.) For the
+shield (M9) the setpoint is an upper bound of the injection. The neutral action, uncontrolled charging, is the
 full rating offered all the time: emobpy's `immediate` strategy, which the
 sessions come from. Sessions reach the model only through the exogenous input
 (`ExogenousInput.ev_sessions`, an `EvSession` of arrival, departure and energy
@@ -832,6 +835,23 @@ null implementation: `env.safety` (called before setpoints are written, receives
 `SystemState`) and `info["action_mask"]` (always present; with `none` it permits
 everything), so a masking policy outside the environment can use it without the
 environment changing.
+
+*The PV dead zone (measured in M4, to be tested in 4.6).* Actions are
+normalised on the **rated** limits, but the power a PV system has available is
+mostly a small part of its rating: over 2016, 18 % of the rating on average in
+daylight and never more than 60 %. Only a request below the available power
+curtails, so in daylight about four fifths of the PV action range, at night all
+of it, and the upper 40 % always lead to the same setpoint, full infeed; over the
+year about 7 % of the range changes anything. The policy's gradient is zero in
+that zone, the initial mean action asks for at most half the rating and hence
+almost never curtails, and the 0-to-100 % curtailment band is on average 0.37
+wide in normalised coordinates instead of 2. The candidate remedy normalises
+the PV action on the **forecast available** power at the decision (−1 full
+infeed, +1 full curtailment): still a power and affine and invertible, but
+dependent on the information set, like `ActionMapper.default_physical`. It
+changes what trains, so it is not adopted on the side but compared against the
+rated normalisation with the learning-curve diagnostic before the M4
+acceptance runs (§12, 4.6).
 
 ### 6.4 Reward
 
@@ -1613,7 +1633,9 @@ place in the environment; 4.4 EV sessions, also in two: 4.4a the sessions
 (D17, emobpy, superseding D16), 4.4b the charge point model and its place in
 the environment; 4.5 reference behaviour for the new assets and a survey of whether heat
 pump and EV load make the lower voltage limit bind; 4.6 the acceptance runs,
-preceded by a new learning-curve diagnostic because the action space grows.
+preceded by a new learning-curve diagnostic because the action space grows, and
+with it the comparison of the PV action normalised on rated against forecast
+available power (the dead zone, §6.3).
 
 *M3 is not a toy.* Under `moderate_growth` the fallback action brings loading from
 280 % to 55.6 % and voltage to 1.051 pu, so PV curtailment alone resolves both the

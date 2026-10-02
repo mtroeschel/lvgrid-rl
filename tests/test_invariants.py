@@ -435,7 +435,11 @@ def test_i4_action_normalisation_is_affine_and_invertible() -> None:
         expected = weight * mapper.to_physical(x) + (1.0 - weight) * mapper.to_physical(y)
         assert np.allclose(mapper.to_physical(mixed), expected)
 
-    # No silent clipping: every limitation an asset applies is reported.
+    # No silent clipping: every limitation an asset applies is reported. The
+    # example is a request beyond the rating. Until M4 it was a request above
+    # the available power, which is not a limitation of an infeed cap but the
+    # absence of curtailment (PvSystem.to_setpoint); counting it made every
+    # step of do_nothing "clipped".
     from datetime import UTC, datetime  # noqa: PLC0415
 
     from lvgrid_rl.components.pv import PvSystem  # noqa: PLC0415
@@ -459,7 +463,7 @@ def test_i4_action_normalisation_is_affine_and_invertible() -> None:
         pq=PQBudgetState(windows_elapsed_count=0),
     )
     state = asset.initial_state(np.random.default_rng(0))
-    setpoint = asset.to_setpoint(state, np.array([-0.02]), info, hold_min=15)
+    setpoint = asset.to_setpoint(state, np.array([-0.025]), info, hold_min=15)
     assert setpoint.was_clipped, "limitation must be reported, not applied silently"
     assert setpoint.clipping_info
 

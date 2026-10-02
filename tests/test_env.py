@@ -472,7 +472,13 @@ def test_timestamps_must_be_timezone_aware() -> None:
 
 
 def test_pv_clipping_is_reported_not_silent() -> None:
-    """A policy systematically proposing infeasible actions must stay visible."""
+    """A policy systematically proposing infeasible actions must stay visible.
+
+    Infeasible is a request beyond the rating. A cap above the available power
+    is not: it means "do not curtail", and the setpoint follows the available
+    power without counting as clipped -- otherwise ``do_nothing`` would be
+    clipped in every step.
+    """
     from lvgrid_rl.components.pv import PvSystem
     from lvgrid_rl.core.information import InformationSet
     from lvgrid_rl.core.schemas import PQBudgetState
@@ -494,10 +500,14 @@ def test_pv_clipping_is_reported_not_silent() -> None:
         pq=PQBudgetState(windows_elapsed_count=0),
     )
     state = asset.initial_state(np.random.default_rng(0))
-    # Asks for full infeed although only a quarter is available.
+    # Full infeed although only a quarter is available: no curtailment asked.
     setpoint = asset.to_setpoint(state, np.array([-0.02]), info, hold_min=15)
     assert setpoint.p_mw == pytest.approx(-0.005)
-    assert setpoint.was_clipped
+    assert not setpoint.was_clipped
+    # Beyond the rating: reported, by how much the rating cut the request.
+    setpoint = asset.to_setpoint(state, np.array([-0.03]), info, hold_min=15)
+    assert setpoint.p_mw == pytest.approx(-0.005)
+    assert setpoint.clipping_info == {"p_mw": pytest.approx(0.01)}
 
 
 def test_pv_dynamics_is_a_pure_function() -> None:

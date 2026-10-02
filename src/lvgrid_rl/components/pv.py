@@ -81,7 +81,9 @@ class PvSystem:
         state-dependent action space would make the mapping non-affine and the
         feasible set non-box, which is exactly what invariant I4 forbids: the
         certified feasible set is formulated in injections. Limiting to what is
-        currently available happens in :meth:`to_setpoint` and is reported.
+        currently available happens in :meth:`to_setpoint` and
+        :meth:`limit_to_physics`; it is not a limitation of the action (see
+        :meth:`to_setpoint`).
         """
         names: list[str] = []
         bounds: list[Interval] = []
@@ -114,11 +116,24 @@ class PvSystem:
         ``hold_min`` is unused: curtailment has no memory, so what is feasible
         does not depend on how long a setpoint is held.
 
-        The available power is taken from the forecast entry for this asset's
-        series, which at decision time is what a real controller would have. Any
-        limitation is reported in ``clipping_info`` rather than applied
-        silently, so that a policy systematically proposing infeasible actions
-        stays visible.
+        The active power action is an **infeed limit**: curtailment caps the
+        infeed, and a cap above what the array can deliver means "do not
+        curtail" -- an admissible action, not an infeasible one. The setpoint is
+        therefore the smaller of the cap and the available power from the
+        forecast (what a real controller has at decision time), and that
+        reduction is **not** reported as clipping, as in
+        :meth:`limit_to_physics`. What the controller actually takes away is
+        recorded as curtailed energy.
+
+        Reported in ``clipping_info``, so that a policy systematically proposing
+        infeasible actions stays visible: requests beyond the rated limits
+        (``p_mw``, ``q_mvar``) and reactive power the inverter's apparent power
+        rating does not allow (``q_mvar_s_max``).
+
+        Up to M4 the gap to the available power was reported under ``p_mw``.
+        Since nearly every step has less than rated power available,
+        ``do_nothing`` counted as clipped in every step, and the count could not
+        tell a policy asking for the impossible from the sun not shining.
         """
         spec = self.action_spec()
         available = float(info.forecast[self.series_id][0])
@@ -129,15 +144,15 @@ class PvSystem:
         for value, name, bound in zip(action, spec.names, spec.bounds, strict=True):
             requested = float(value)
             limited = min(max(requested, bound.lo), bound.hi)
-            if name == "p_mw":
-                # Cannot feed in more than is available: available is <= 0, so
-                # the setpoint must not be below it.
-                limited = max(limited, available)
-                p_mw = limited
-            else:
-                q_mvar = limited
             if abs(limited - requested) > 1e-12:
                 clipping[name] = limited - requested
+            if name == "p_mw":
+                # Cannot feed in more than is available: available is <= 0, so
+                # the setpoint must not be below it. Not a limitation of the
+                # action, see the docstring.
+                p_mw = max(limited, available)
+            else:
+                q_mvar = limited
 
         if self.mode is PvMode.PQ and self.ratings.s_max_mva is not None:
             apparent = float(np.hypot(p_mw, q_mvar))
