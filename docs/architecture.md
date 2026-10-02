@@ -384,6 +384,31 @@ absorbs it. Only together with growth does the criterion start to bind.
 marked as extreme cases in their notes and configuration files, with a test
 asserting that they are.
 
+*Does heat pump and EV load make the lower limit bind? (M4 4.5,
+`scripts/survey_undervoltage.py`).* No. `do_nothing` over all 51 weeks of the
+split in evaluation mode, at 5 minutes with ten-minute windows, with the heat
+pumps and charge points on their SimBench profiles and controllable but
+uncontrolled (thermostats, charging on arrival):
+
+| Scenario | Assets | pass rate | windows < 0.90 | windows > 1.10 | lowest ten-minute mean |
+|---|---|---|---|---|---|
+| `moderate_growth` | SimBench | 0.9336 | 0 | 1,020 | 1.0244 |
+| `moderate_growth` | controllable | 0.9336 | 0 | 1,022 | 1.0255 |
+| `undervoltage_stress` | SimBench | 1.0000 | 0 | 0 | 0.9248 |
+| `undervoltage_stress` | controllable | 1.0000 | 0 | 0 | 0.9328 |
+
+In the working scenario the voltage never falls below 1.024 pu; the problem is
+on the upper side only. Even `undervoltage_stress` — heat pumps and charge
+points at 2.5 times, PV halved, a 0.96 pu slack and a transformer at 70 % — stays
+0.025 pu above the K95 floor. The emobpy vehicles and the thermostats raise the
+minimum slightly against the SimBench curves (0.9328 against 0.9248), which read
+as more coincident at the evening peak. Decided: the lower criterion is
+recorded as not binding on this grid (§13.2, question 2), `moderate_growth`
+stays the working scenario, and a harder undervoltage scenario is built only
+when the work needs one. The pass rates are those of the environment path; the
+table above them comes from the 15-minute quasi-static run of M2 and is not
+directly comparable.
+
 ### 4.5 Metrics
 
 `metrics.py` reduces a grid state to the quantities reward and KPIs need:
@@ -1440,11 +1465,53 @@ results are read.
 | B2 | `fixed_cap` | rigid infeed limit (70 % / 60 % of rated power) |
 | B3 | `cosphi_p` / `q_u_droop` | local reactive power control per VDE-AR-N 4105 |
 | B4 | `p_u_droop` | voltage-dependent active power curtailment |
-| B5 | `en14a_dimming` | power reduction of controllable devices (§14a EnWG, 4.2 kW at the connection point) |
-| B6 | `greedy_local` | PV surplus charging for BESS/EV, "as late as necessary" charging |
+| B5 | `en14a_dimming` | power reduction of controllable devices (§14a EnWG, 4.2 kW at the connection point) — *implemented in M4 4.5* |
+| B6 | `greedy_local` | PV surplus charging for BESS/EV, "as late as necessary" charging — *implemented in M4 4.5* |
 | B7 | `opf_myopic` | centralised AC OPF per time step, no foresight |
 | B8 | `mpc_forecast` | multi-step optimisation with a realistic forecast |
 | B9 | `mpc_oracle` | multi-step optimisation with perfect foresight — **upper bound** |
+
+*B5 and B6 (M4 4.5, `baselines/flexibility.py`)* were brought forward from M6
+so that the M4 acceptance runs do not compare a controller with batteries, heat
+pumps and charge points only against references that leave them idle. Both
+leave PV to the tuned P(U) rule (B4): on their own they do not touch the
+PV-driven overvoltage of the working scenario and would lose to B4 trivially,
+so what the comparison shows is what the load rule adds.
+
+- **B5** dims charge points and heat pumps to the §14a guaranteed 4.2 kW (heat
+  pumps above 11 kW to 40 % of their rating) while the transformer is loaded
+  above a threshold *and* the grid imports; never on back-feed, where dimming
+  load would add to the congestion. Hysteresis 10 points. Otherwise everything
+  runs uncontrolled.
+- **B6** works per connection point on the forecast of its uncontrolled
+  elements: the local PV surplus goes to pre-heating (heat pump below its
+  thermostat's off level), then to vehicles, then to the battery above a
+  threshold θ of the bus's PV rating; the battery covers the local uncontrolled
+  load; vehicles charge at full power once their laxity falls to a margin m
+  plus one control step, before that only from surplus. An empty charge point
+  offers its rating, so that a vehicle arriving within the hold does not wait.
+
+Tuned in the full M4 configuration on the validation weeks
+(`tune_baselines.py --flex`), lexicographically on violating windows, the
+overload integral within 1 %, then the cost of control — curtailment, unserved
+and deferred EV energy and comfort at their reward weights. Measured on the
+validation episodes (`configs/baseline/tuned.json`):
+
+- **B5 never acts in `moderate_growth`.** Under import the transformer reaches
+  at most 45 % (99th percentile 34 %), so every threshold from 70 to 110 %
+  gives P(U) exactly. The congestion on this grid is PV back-feed, where §14a
+  must not dim. B5 stays the reference for a load-dominated scenario.
+- **B6 with θ = 0.2, m = 2 h** cuts the overload integral by 62 % against P(U)
+  alone (5.18 against 13.74) and curtailment by 88 %, with no energy unserved
+  and 0.017 MWh deferred past episode ends. θ = 0 fills the batteries in the
+  morning and θ = 0.4 leaves too little to them; the margin matters only for
+  the cost. Part of the gain is borrowed: the batteries end the episodes
+  2.2 MWh emptier in total, which the storage balance KPI shows.
+- Two defects of the first version were found by the search itself: an empty
+  charge point offered nothing, so a vehicle arriving within the hold waited
+  up to a control step and tight sessions ended short (9 in the validation
+  episodes); and the offer of an empty charge point was taken out of the
+  local surplus.
 
 B7–B9 optimise on a reduced, linearised grid model (LinDistFlow or pandapower
 sensitivities) and are recomputed in the full AC model afterwards, so the physical
@@ -1776,6 +1843,10 @@ methodologically harder than it looks. Four points that cost time:
    binds; for heat pump and EV-dominated undervoltage it does. The measurements in
    §4.4 show that `undervoltage_stress` still passes because the ten-minute mean
    absorbs the excursion — reaching the lower criterion needs a harder scenario.
+   *Answered for this grid in M4 4.5:* with controllable heat pumps and charge
+   points the lower limit does not bind in any scenario (lowest ten-minute mean
+   1.024 pu in `moderate_growth`, 0.933 in `undervoltage_stress`); a harder
+   scenario is deferred until the work needs it (§4.4).
 3. **How is the Lagrangian variant evaluated?** It optimises a different objective
    than the fixed-weight variant, so the comparison runs on physical KPIs and the
    curtailment/pass-rate Pareto plot only.

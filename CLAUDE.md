@@ -32,8 +32,11 @@ in the environment (4.3b, `train.py --heat-pumps`). 4.4, EV sessions (D17, emobp
 sessions, is done (`tools/emobpy/`, `data/sources/ev_sessions.py`); 4.4b, the
 charge point model, is done in two parts as well: the model
 (`components/ev_charger.py`, I2 case added) and its place in the environment
-(`train.py --ev`). 4.5, reference behaviour and the undervoltage survey, is
-next. 4.6 includes the comparison of PV action normalisation (rated against
+(`train.py --ev`). 4.5 is done: the undervoltage survey (the lower limit does not
+bind, `scripts/survey_undervoltage.py`) and the flexibility baselines B5
+(§14a dimming) and B6 (greedy local), tuned in the full configuration
+(`tune_baselines.py --flex`); `train.py` and `evaluate.py` add them when a run
+has flexible assets. 4.6, the acceptance runs, is next. 4.6 includes the comparison of PV action normalisation (rated against
 forecast available power, the dead zone in `docs/architecture.md` §6.3). **Invariant I2 is satisfied since 4.1**: asset dynamics
 are pure functions over a frozen `AssetState`. Its test in
 `tests/test_invariants.py` is parametrised over asset types — every new asset

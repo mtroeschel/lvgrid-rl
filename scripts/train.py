@@ -24,6 +24,7 @@ from pathlib import Path
 
 from lvgrid_rl.agents.factory import CUSTOM_POLICIES, AgentSpec, make_agent
 from lvgrid_rl.agents.policy_controller import PolicyController
+from lvgrid_rl.baselines.flexibility import flex_baselines
 from lvgrid_rl.baselines.methods import DoNothing, FixedCap, PUDroop, asset_bus_positions
 from lvgrid_rl.data.timebase import TimeBase
 from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
@@ -355,16 +356,15 @@ def main() -> None:
     # runs although they are deterministic, and made cross-seed aggregation
     # meaningless.
     eval_spec = EpisodeSpec(mode=EpisodeMode.EVALUATE, randomise_budget=False)
-    positions = asset_bus_positions(
-        make_env(
-            code=args.code,
-            scenario=args.scenario,
-            set_name=args.eval_set,
-            storage=storage,
-            heat_pumps=heat_pumps,
-            ev=ev,
-        )
+    probe = make_env(
+        code=args.code,
+        scenario=args.scenario,
+        set_name=args.eval_set,
+        storage=storage,
+        heat_pumps=heat_pumps,
+        ev=ev,
     )
+    positions = asset_bus_positions(probe)
 
     cap = tuned["fixed_cap"]["params"]["cap"]
     droop = tuned["p_u_droop"]["params"]
@@ -379,6 +379,9 @@ def main() -> None:
             e.mapper, positions, droop["v_start"], droop["v_max"]
         ),
     }
+    # B5 and B6, when the run has flexible assets and they are tuned.
+    if is_tuned:
+        controllers.update(flex_baselines(tuned, positions, probe))
     for name, build in controllers.items():
         env = make_env(
             code=args.code,
