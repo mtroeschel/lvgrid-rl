@@ -81,13 +81,52 @@ weeks, PV curtailment only). Measured for B6 on the test weeks: pass rate
 |---|---|---|
 | **A1** grid | pass rate = 1.0 | M3 policy 1.0; B6 0.9829 |
 | **A2** grid | overload ≤ 2.0 | M3 policy 0.034; B6 64.3 |
-| **A3** value of flexibility | curtailment ≤ 20 MWh, at most half of the M3 policy's | M3 policy 39.89 MWh |
+| **A3** value of flexibility | curtailment ≤ 11.6 MWh, half of the least any PV-only controller can do | PV-only optimum 23.2 MWh; M3 policy 39.89 MWh; optimum with batteries 0 MWh |
 | **A4** supply | EV energy unserved plus deferred ≤ 0.015 MWh (1 % of the 1.48 MWh charged in the test weeks) and heat pump comfort deviation ≤ 1.0 Kh, summed over the test weeks | every reference: 0 unserved, ≤ 0.003 deferred, 0 Kh |
 | **A5** no borrowing | battery energy change ≥ −1.26 MWh and buffer energy change ≥ −0.25 MWh, summed over the nine weeks (−10 % of the total capacity, 1.40 MWh and 0.28 MWh, per week) | B6: +0.40 MWh |
 
 A2 is the same bound as in M4.0 (V2). A3 is the claim of M3's consequence 1
-made measurable. A4 and A5 close the two ways a policy could look good without
+made measurable, against the physics rather than against another policy (next
+section). A4 and A5 close the two ways a policy could look good without
 being good: by not delivering, or by ending the week with empty storage.
+
+## How low can curtailment go? (the basis of A3)
+
+A3 first read "≤ 20 MWh, half of the M3 policy's". Asked before the first run
+whether that is attainable and what the least curtailment is that resolves the
+voltage and thermal problems, the question was answered with a bound and A3
+re-based on it. No run of this plan had started.
+
+`scripts/curtailment_bound.py --voltage` solves, per test week, a linear
+programme with the whole week known in advance: least curtailed PV energy such
+that the transformer and every line stay at or below their rating (flows from
+the radial topology), every assessed bus stays at or below 1.09 pu at every
+step (stricter than EN 50160; linearised, with 0.01 pu for the linearisation
+error), and the batteries keep their limits and end each week no emptier than
+they began. Heat pumps and charge points stay on their SimBench profiles, so
+their flexibility is not used. The plan is then replayed in the full AC power
+flow, and the replay is what the table reports.
+
+| test weeks (9) | curtailment | pass rate | K95 | overload |
+|---|---|---|---|---|
+| optimum with batteries | **0 MWh** | 1.0 | 0 | 0.001 |
+| optimum, PV curtailment only | **23.2 MWh** | 1.0 | 0 | 0 |
+| M3 policy (PV only) | 39.89 MWh | 1.0 | 0 | 0.034 |
+| B6 (best rule) | 1.57 MWh | 0.9829 | 2 | 64.3 |
+
+With batteries and perfect foresight no curtailment at all is needed; the
+batteries end the nine weeks 3.8 MWh fuller in total, at 40.6 MWh throughput.
+PV curtailment alone needs at least 23.2 MWh; the M3 policy used 1.7 times
+that. A first programme without the voltage condition also found 0 MWh but
+failed K95 in the replay (pass rate 0.93): it emptied the batteries at night at
+full power, which lifts the voltage at the end of the long feeder above
+1.10 pu. With the voltage condition at 1.097 pu the margin was too small for
+that (predicted 1.095, reached 1.101); at 1.09 the plan holds.
+
+**A3 is therefore set at half the PV-only optimum, 11.6 MWh**: less than any
+controller can reach by curtailing PV, even with perfect foresight, so meeting
+it shows that the policy uses the flexibility. It is not set nearer the
+optimum with batteries, because the policy sees one hour ahead, not the week.
 
 ## Decision rule
 
