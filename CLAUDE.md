@@ -33,7 +33,8 @@ sessions, is done (`tools/emobpy/`, `data/sources/ev_sessions.py`); 4.4b, the
 charge point model, is done in two parts as well: the model
 (`components/ev_charger.py`, I2 case added) and its place in the environment
 (`train.py --ev`). 4.5, reference behaviour and the undervoltage survey, is
-next. **Invariant I2 is satisfied since 4.1**: asset dynamics
+next. 4.6 includes the comparison of PV action normalisation (rated against
+forecast available power, the dead zone in `docs/architecture.md` §6.3). **Invariant I2 is satisfied since 4.1**: asset dynamics
 are pure functions over a frozen `AssetState`. Its test in
 `tests/test_invariants.py` is parametrised over asset types — every new asset
 model (heat pump, charge point) adds a case to `_i2_assets()`, it does not get a
