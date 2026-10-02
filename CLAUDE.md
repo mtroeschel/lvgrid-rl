@@ -89,6 +89,9 @@ under which the multiplier can only grow.
   3.9). Never add it to the project's dependencies. Its `set_seed` is not
   enough for reproducibility and its tour sampling can loop forever; the tool
   handles both. The project reads its Parquet output, checked by hash.
+  **Reproduce data with `--replay`** from the committed manifest
+  (`configs/ev/emobpy-2016-home-only.manifest.json`), not with a fresh run:
+  which seeds a fresh run keeps depends on how fast the machine is.
 - **PyTorch runs with one thread** (`--torch-threads`, default 1). With the
   default pool the shared policy took 7.6 ms per decision instead of 1.0: the
   threads fall asleep during every environment step and have to be woken for

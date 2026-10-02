@@ -1,0 +1,4534 @@
+{
+  "tool": "tools/emobpy/generate.py",
+  "tool_sha256": "93fe31475bdaa84becc39a1c189e39bc2379e72bc2082f41ddac41b566e05502",
+  "versions": {
+    "python": "3.9.25",
+    "emobpy": "0.6.2",
+    "numpy": "1.23.5",
+    "pandas": "1.5.3"
+  },
+  "base_seed": 2016,
+  "timeout_s": 600.0,
+  "replay_of": {
+    "path": "data/raw/emobpy/2016-home-only-v0/manifest.json",
+    "sha256": "0e69bc14658e7ca569fd2f20c6b4a93b085047c3b671a22c0e2282783fca4d3d"
+  },
+  "first_monday": "2015-12-28",
+  "weeks": 53,
+  "charge_points": [
+    {
+      "asset_id": "load:15",
+      "bus": 8,
+      "simbench_profile": "HLS_A_11.0",
+      "nominal_power_kw": 11.0,
+      "annual_energy_mwh": 1.356184,
+      "driver": "freetime",
+      "vehicle": [
+        "Tesla",
+        "Model 3 Long Range AWD",
+        2020
+      ],
+      "battery_capacity_kwh": 79.5,
+      "charging_eff": 0.9,
+      "file": "load_15.parquet",
+      "sha256": "9a35638f2e4fa5fbde4b22b08a94f9ec4e93fd20d53e7642f166aaaf51f624dc",
+      "weeks": [
+        {
+          "week": 0,
+          "attempts": [
+            {
+              "seed": 2016000000,
+              "outcome": "ok",
+              "seconds": 26.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 1,
+          "attempts": [
+            {
+              "seed": 2016000100,
+              "outcome": "ok",
+              "seconds": 38.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 2,
+          "attempts": [
+            {
+              "seed": 2016000200,
+              "outcome": "ok",
+              "seconds": 38.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 3,
+          "attempts": [
+            {
+              "seed": 2016000300,
+              "outcome": "ok",
+              "seconds": 38.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 4,
+          "attempts": [
+            {
+              "seed": 2016000400,
+              "outcome": "ok",
+              "seconds": 23.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 5,
+          "attempts": [
+            {
+              "seed": 2016000500,
+              "outcome": "ok",
+              "seconds": 32.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 6,
+          "attempts": [
+            {
+              "seed": 2016000600,
+              "outcome": "ok",
+              "seconds": 22.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 7,
+          "attempts": [
+            {
+              "seed": 2016000700,
+              "outcome": "ok",
+              "seconds": 25.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 8,
+          "attempts": [
+            {
+              "seed": 2016000800,
+              "outcome": "ok",
+              "seconds": 31.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 9,
+          "attempts": [
+            {
+              "seed": 2016000900,
+              "outcome": "ok",
+              "seconds": 31.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 10,
+          "attempts": [
+            {
+              "seed": 2016001000,
+              "outcome": "ok",
+              "seconds": 28.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 11,
+          "attempts": [
+            {
+              "seed": 2016001100,
+              "outcome": "ok",
+              "seconds": 32.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 12,
+          "attempts": [
+            {
+              "seed": 2016001200,
+              "outcome": "ok",
+              "seconds": 29.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 13,
+          "attempts": [
+            {
+              "seed": 2016001300,
+              "outcome": "ok",
+              "seconds": 30.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 14,
+          "attempts": [
+            {
+              "seed": 2016001400,
+              "outcome": "ok",
+              "seconds": 38.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 15,
+          "attempts": [
+            {
+              "seed": 2016001500,
+              "outcome": "ok",
+              "seconds": 29.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 16,
+          "attempts": [
+            {
+              "seed": 2016001600,
+              "outcome": "ok",
+              "seconds": 29.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 17,
+          "attempts": [
+            {
+              "seed": 2016001700,
+              "outcome": "ok",
+              "seconds": 49.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 18,
+          "attempts": [
+            {
+              "seed": 2016001800,
+              "outcome": "ok",
+              "seconds": 36.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 19,
+          "attempts": [
+            {
+              "seed": 2016001900,
+              "outcome": "ok",
+              "seconds": 35.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 20,
+          "attempts": [
+            {
+              "seed": 2016002000,
+              "outcome": "ok",
+              "seconds": 30.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 21,
+          "attempts": [
+            {
+              "seed": 2016002100,
+              "outcome": "ok",
+              "seconds": 41.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 22,
+          "attempts": [
+            {
+              "seed": 2016002200,
+              "outcome": "ok",
+              "seconds": 41.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 23,
+          "attempts": [
+            {
+              "seed": 2016002300,
+              "outcome": "ok",
+              "seconds": 41.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 24,
+          "attempts": [
+            {
+              "seed": 2016002400,
+              "outcome": "ok",
+              "seconds": 49.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 25,
+          "attempts": [
+            {
+              "seed": 2016002500,
+              "outcome": "ok",
+              "seconds": 39.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 26,
+          "attempts": [
+            {
+              "seed": 2016002600,
+              "outcome": "ok",
+              "seconds": 46.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 27,
+          "attempts": [
+            {
+              "seed": 2016002700,
+              "outcome": "ok",
+              "seconds": 42.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 28,
+          "attempts": [
+            {
+              "seed": 2016002800,
+              "outcome": "ok",
+              "seconds": 47.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 29,
+          "attempts": [
+            {
+              "seed": 2016002900,
+              "outcome": "ok",
+              "seconds": 45.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 30,
+          "attempts": [
+            {
+              "seed": 2016003000,
+              "outcome": "ok",
+              "seconds": 44.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 31,
+          "attempts": [
+            {
+              "seed": 2016003100,
+              "outcome": "ok",
+              "seconds": 47.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 32,
+          "attempts": [
+            {
+              "seed": 2016003200,
+              "outcome": "ok",
+              "seconds": 54.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 33,
+          "attempts": [
+            {
+              "seed": 2016003300,
+              "outcome": "ok",
+              "seconds": 51.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 34,
+          "attempts": [
+            {
+              "seed": 2016003400,
+              "outcome": "ok",
+              "seconds": 54.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 35,
+          "attempts": [
+            {
+              "seed": 2016003500,
+              "outcome": "ok",
+              "seconds": 54.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 36,
+          "attempts": [
+            {
+              "seed": 2016003600,
+              "outcome": "ok",
+              "seconds": 44.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 37,
+          "attempts": [
+            {
+              "seed": 2016003700,
+              "outcome": "ok",
+              "seconds": 51.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 38,
+          "attempts": [
+            {
+              "seed": 2016003800,
+              "outcome": "ok",
+              "seconds": 60.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 39,
+          "attempts": [
+            {
+              "seed": 2016003900,
+              "outcome": "ok",
+              "seconds": 57.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 40,
+          "attempts": [
+            {
+              "seed": 2016004000,
+              "outcome": "ok",
+              "seconds": 45.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 41,
+          "attempts": [
+            {
+              "seed": 2016004100,
+              "outcome": "ok",
+              "seconds": 52.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 42,
+          "attempts": [
+            {
+              "seed": 2016004200,
+              "outcome": "ok",
+              "seconds": 44.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 43,
+          "attempts": [
+            {
+              "seed": 2016004300,
+              "outcome": "ok",
+              "seconds": 48.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 44,
+          "attempts": [
+            {
+              "seed": 2016004400,
+              "outcome": "ok",
+              "seconds": 47.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 45,
+          "attempts": [
+            {
+              "seed": 2016004500,
+              "outcome": "ok",
+              "seconds": 40.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 46,
+          "attempts": [
+            {
+              "seed": 2016004600,
+              "outcome": "ok",
+              "seconds": 55.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 47,
+          "attempts": [
+            {
+              "seed": 2016004700,
+              "outcome": "ok",
+              "seconds": 52.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 48,
+          "attempts": [
+            {
+              "seed": 2016004800,
+              "outcome": "ok",
+              "seconds": 45.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 49,
+          "attempts": [
+            {
+              "seed": 2016004900,
+              "outcome": "ok",
+              "seconds": 50.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 50,
+          "attempts": [
+            {
+              "seed": 2016005000,
+              "outcome": "ok",
+              "seconds": 50.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 51,
+          "attempts": [
+            {
+              "seed": 2016005100,
+              "outcome": "ok",
+              "seconds": 48.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 52,
+          "attempts": [
+            {
+              "seed": 2016005200,
+              "outcome": "ok",
+              "seconds": 42.1
+            }
+          ],
+          "availability_success": true
+        }
+      ]
+    },
+    {
+      "asset_id": "load:18",
+      "bus": 11,
+      "simbench_profile": "HLS_A_3.7",
+      "nominal_power_kw": 3.7,
+      "annual_energy_mwh": 0.996421,
+      "driver": "fulltime",
+      "vehicle": [
+        "Renault",
+        "Zoe Q90",
+        2019
+      ],
+      "battery_capacity_kwh": 45.61,
+      "charging_eff": 0.9,
+      "file": "load_18.parquet",
+      "sha256": "a63d2927d95dd066b897b88f7a211c337aa6f75c75c7b4fc9e912b983abc3ddf",
+      "weeks": [
+        {
+          "week": 0,
+          "attempts": [
+            {
+              "seed": 2016010000,
+              "outcome": "ok",
+              "seconds": 496.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 1,
+          "attempts": [
+            {
+              "seed": 2016010100,
+              "outcome": "ok",
+              "seconds": 149.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 2,
+          "attempts": [
+            {
+              "seed": 2016010200,
+              "outcome": "ok",
+              "seconds": 69.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 3,
+          "attempts": [
+            {
+              "seed": 2016010300,
+              "outcome": "ok",
+              "seconds": 64.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 4,
+          "attempts": [
+            {
+              "seed": 2016010400,
+              "outcome": "ok",
+              "seconds": 266.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 5,
+          "attempts": [
+            {
+              "seed": 2016010500,
+              "outcome": "ok",
+              "seconds": 96.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 6,
+          "attempts": [
+            {
+              "seed": 2016010600,
+              "outcome": "ok",
+              "seconds": 151.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 7,
+          "attempts": [
+            {
+              "seed": 2016010700,
+              "outcome": "ok",
+              "seconds": 413.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 8,
+          "attempts": [
+            {
+              "seed": 2016010800,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016010801,
+              "outcome": "ok",
+              "seconds": 75.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 9,
+          "attempts": [
+            {
+              "seed": 2016010900,
+              "outcome": "ok",
+              "seconds": 281.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 10,
+          "attempts": [
+            {
+              "seed": 2016011000,
+              "outcome": "ok",
+              "seconds": 266.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 11,
+          "attempts": [
+            {
+              "seed": 2016011100,
+              "outcome": "ok",
+              "seconds": 111.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 12,
+          "attempts": [
+            {
+              "seed": 2016011200,
+              "outcome": "ok",
+              "seconds": 264.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 13,
+          "attempts": [
+            {
+              "seed": 2016011300,
+              "outcome": "ok",
+              "seconds": 256.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 14,
+          "attempts": [
+            {
+              "seed": 2016011400,
+              "outcome": "ok",
+              "seconds": 494.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 15,
+          "attempts": [
+            {
+              "seed": 2016011500,
+              "outcome": "timeout",
+              "seconds": 600.3
+            },
+            {
+              "seed": 2016011501,
+              "outcome": "ok",
+              "seconds": 214.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 16,
+          "attempts": [
+            {
+              "seed": 2016011600,
+              "outcome": "ok",
+              "seconds": 104.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 17,
+          "attempts": [
+            {
+              "seed": 2016011700,
+              "outcome": "ok",
+              "seconds": 154.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 18,
+          "attempts": [
+            {
+              "seed": 2016011800,
+              "outcome": "ok",
+              "seconds": 187.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 19,
+          "attempts": [
+            {
+              "seed": 2016011900,
+              "outcome": "timeout",
+              "seconds": 600.7
+            },
+            {
+              "seed": 2016011901,
+              "outcome": "ok",
+              "seconds": 489.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 20,
+          "attempts": [
+            {
+              "seed": 2016012000,
+              "outcome": "ok",
+              "seconds": 294.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 21,
+          "attempts": [
+            {
+              "seed": 2016012100,
+              "outcome": "ok",
+              "seconds": 202.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 22,
+          "attempts": [
+            {
+              "seed": 2016012200,
+              "outcome": "ok",
+              "seconds": 164.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 23,
+          "attempts": [
+            {
+              "seed": 2016012300,
+              "outcome": "ok",
+              "seconds": 142.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 24,
+          "attempts": [
+            {
+              "seed": 2016012400,
+              "outcome": "ok",
+              "seconds": 118.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 25,
+          "attempts": [
+            {
+              "seed": 2016012500,
+              "outcome": "ok",
+              "seconds": 195.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 26,
+          "attempts": [
+            {
+              "seed": 2016012600,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016012601,
+              "outcome": "ok",
+              "seconds": 213.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 27,
+          "attempts": [
+            {
+              "seed": 2016012700,
+              "outcome": "ok",
+              "seconds": 365.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 28,
+          "attempts": [
+            {
+              "seed": 2016012800,
+              "outcome": "ok",
+              "seconds": 466.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 29,
+          "attempts": [
+            {
+              "seed": 2016012900,
+              "outcome": "timeout",
+              "seconds": 600.3
+            },
+            {
+              "seed": 2016012901,
+              "outcome": "ok",
+              "seconds": 97.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 30,
+          "attempts": [
+            {
+              "seed": 2016013000,
+              "outcome": "ok",
+              "seconds": 156.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 31,
+          "attempts": [
+            {
+              "seed": 2016013100,
+              "outcome": "ok",
+              "seconds": 232.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 32,
+          "attempts": [
+            {
+              "seed": 2016013200,
+              "outcome": "timeout",
+              "seconds": 600.5
+            },
+            {
+              "seed": 2016013201,
+              "outcome": "ok",
+              "seconds": 257.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 33,
+          "attempts": [
+            {
+              "seed": 2016013300,
+              "outcome": "ok",
+              "seconds": 413.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 34,
+          "attempts": [
+            {
+              "seed": 2016013400,
+              "outcome": "ok",
+              "seconds": 449.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 35,
+          "attempts": [
+            {
+              "seed": 2016013500,
+              "outcome": "ok",
+              "seconds": 356.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 36,
+          "attempts": [
+            {
+              "seed": 2016013600,
+              "outcome": "ok",
+              "seconds": 558.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 37,
+          "attempts": [
+            {
+              "seed": 2016013700,
+              "outcome": "timeout",
+              "seconds": 600.4
+            },
+            {
+              "seed": 2016013701,
+              "outcome": "ok",
+              "seconds": 141.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 38,
+          "attempts": [
+            {
+              "seed": 2016013800,
+              "outcome": "ok",
+              "seconds": 517.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 39,
+          "attempts": [
+            {
+              "seed": 2016013900,
+              "outcome": "ok",
+              "seconds": 517.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 40,
+          "attempts": [
+            {
+              "seed": 2016014000,
+              "outcome": "ok",
+              "seconds": 503.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 41,
+          "attempts": [
+            {
+              "seed": 2016014100,
+              "outcome": "ok",
+              "seconds": 506.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 42,
+          "attempts": [
+            {
+              "seed": 2016014200,
+              "outcome": "ok",
+              "seconds": 416.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 43,
+          "attempts": [
+            {
+              "seed": 2016014300,
+              "outcome": "ok",
+              "seconds": 164.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 44,
+          "attempts": [
+            {
+              "seed": 2016014400,
+              "outcome": "ok",
+              "seconds": 466.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 45,
+          "attempts": [
+            {
+              "seed": 2016014500,
+              "outcome": "ok",
+              "seconds": 125.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 46,
+          "attempts": [
+            {
+              "seed": 2016014600,
+              "outcome": "ok",
+              "seconds": 113.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 47,
+          "attempts": [
+            {
+              "seed": 2016014700,
+              "outcome": "timeout",
+              "seconds": 600.3
+            },
+            {
+              "seed": 2016014701,
+              "outcome": "ok",
+              "seconds": 193.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 48,
+          "attempts": [
+            {
+              "seed": 2016014800,
+              "outcome": "ok",
+              "seconds": 147.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 49,
+          "attempts": [
+            {
+              "seed": 2016014900,
+              "outcome": "ok",
+              "seconds": 102.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 50,
+          "attempts": [
+            {
+              "seed": 2016015000,
+              "outcome": "timeout",
+              "seconds": 600.4
+            },
+            {
+              "seed": 2016015001,
+              "outcome": "ok",
+              "seconds": 161.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 51,
+          "attempts": [
+            {
+              "seed": 2016015100,
+              "outcome": "timeout",
+              "seconds": 600.4
+            },
+            {
+              "seed": 2016015101,
+              "outcome": "ok",
+              "seconds": 134.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 52,
+          "attempts": [
+            {
+              "seed": 2016015200,
+              "outcome": "ok",
+              "seconds": 294.7
+            }
+          ],
+          "availability_success": true
+        }
+      ]
+    },
+    {
+      "asset_id": "load:19",
+      "bus": 10,
+      "simbench_profile": "HLS_B_3.7",
+      "nominal_power_kw": 3.7,
+      "annual_energy_mwh": 1.035107,
+      "driver": "fulltime",
+      "vehicle": [
+        "Volkswagen",
+        "ID.3",
+        2020
+      ],
+      "battery_capacity_kwh": 45.0,
+      "charging_eff": 0.9,
+      "file": "load_19.parquet",
+      "sha256": "f1601deea3119a6705071f00657433ed0264f6e07ed16f2b2ef0770f4f172c38",
+      "weeks": [
+        {
+          "week": 0,
+          "attempts": [
+            {
+              "seed": 2016020000,
+              "outcome": "ok",
+              "seconds": 506.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 1,
+          "attempts": [
+            {
+              "seed": 2016020100,
+              "outcome": "ok",
+              "seconds": 187.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 2,
+          "attempts": [
+            {
+              "seed": 2016020200,
+              "outcome": "ok",
+              "seconds": 420.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 3,
+          "attempts": [
+            {
+              "seed": 2016020300,
+              "outcome": "ok",
+              "seconds": 151.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 4,
+          "attempts": [
+            {
+              "seed": 2016020400,
+              "outcome": "ok",
+              "seconds": 208.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 5,
+          "attempts": [
+            {
+              "seed": 2016020500,
+              "outcome": "timeout",
+              "seconds": 600.3
+            },
+            {
+              "seed": 2016020501,
+              "outcome": "ok",
+              "seconds": 191.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 6,
+          "attempts": [
+            {
+              "seed": 2016020600,
+              "outcome": "ok",
+              "seconds": 139.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 7,
+          "attempts": [
+            {
+              "seed": 2016020700,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016020701,
+              "outcome": "ok",
+              "seconds": 335.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 8,
+          "attempts": [
+            {
+              "seed": 2016020800,
+              "outcome": "ok",
+              "seconds": 108.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 9,
+          "attempts": [
+            {
+              "seed": 2016020900,
+              "outcome": "ok",
+              "seconds": 531.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 10,
+          "attempts": [
+            {
+              "seed": 2016021000,
+              "outcome": "ok",
+              "seconds": 385.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 11,
+          "attempts": [
+            {
+              "seed": 2016021100,
+              "outcome": "ok",
+              "seconds": 215.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 12,
+          "attempts": [
+            {
+              "seed": 2016021200,
+              "outcome": "ok",
+              "seconds": 140.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 13,
+          "attempts": [
+            {
+              "seed": 2016021300,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016021301,
+              "outcome": "ok",
+              "seconds": 47.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 14,
+          "attempts": [
+            {
+              "seed": 2016021400,
+              "outcome": "ok",
+              "seconds": 124.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 15,
+          "attempts": [
+            {
+              "seed": 2016021500,
+              "outcome": "timeout",
+              "seconds": 600.1
+            },
+            {
+              "seed": 2016021501,
+              "outcome": "ok",
+              "seconds": 275.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 16,
+          "attempts": [
+            {
+              "seed": 2016021600,
+              "outcome": "ok",
+              "seconds": 104.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 17,
+          "attempts": [
+            {
+              "seed": 2016021700,
+              "outcome": "timeout",
+              "seconds": 600.4
+            },
+            {
+              "seed": 2016021701,
+              "outcome": "ok",
+              "seconds": 421.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 18,
+          "attempts": [
+            {
+              "seed": 2016021800,
+              "outcome": "ok",
+              "seconds": 394.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 19,
+          "attempts": [
+            {
+              "seed": 2016021900,
+              "outcome": "ok",
+              "seconds": 155.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 20,
+          "attempts": [
+            {
+              "seed": 2016022000,
+              "outcome": "ok",
+              "seconds": 158.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 21,
+          "attempts": [
+            {
+              "seed": 2016022100,
+              "outcome": "ok",
+              "seconds": 210.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 22,
+          "attempts": [
+            {
+              "seed": 2016022200,
+              "outcome": "ok",
+              "seconds": 267.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 23,
+          "attempts": [
+            {
+              "seed": 2016022300,
+              "outcome": "ok",
+              "seconds": 186.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 24,
+          "attempts": [
+            {
+              "seed": 2016022400,
+              "outcome": "ok",
+              "seconds": 178.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 25,
+          "attempts": [
+            {
+              "seed": 2016022500,
+              "outcome": "ok",
+              "seconds": 247.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 26,
+          "attempts": [
+            {
+              "seed": 2016022600,
+              "outcome": "timeout",
+              "seconds": 600.3
+            },
+            {
+              "seed": 2016022601,
+              "outcome": "ok",
+              "seconds": 437.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 27,
+          "attempts": [
+            {
+              "seed": 2016022700,
+              "outcome": "ok",
+              "seconds": 85.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 28,
+          "attempts": [
+            {
+              "seed": 2016022800,
+              "outcome": "ok",
+              "seconds": 78.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 29,
+          "attempts": [
+            {
+              "seed": 2016022900,
+              "outcome": "ok",
+              "seconds": 123.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 30,
+          "attempts": [
+            {
+              "seed": 2016023000,
+              "outcome": "ok",
+              "seconds": 156.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 31,
+          "attempts": [
+            {
+              "seed": 2016023100,
+              "outcome": "ok",
+              "seconds": 437.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 32,
+          "attempts": [
+            {
+              "seed": 2016023200,
+              "outcome": "ok",
+              "seconds": 60.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 33,
+          "attempts": [
+            {
+              "seed": 2016023300,
+              "outcome": "ok",
+              "seconds": 346.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 34,
+          "attempts": [
+            {
+              "seed": 2016023400,
+              "outcome": "ok",
+              "seconds": 91.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 35,
+          "attempts": [
+            {
+              "seed": 2016023500,
+              "outcome": "ok",
+              "seconds": 561.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 36,
+          "attempts": [
+            {
+              "seed": 2016023600,
+              "outcome": "ok",
+              "seconds": 148.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 37,
+          "attempts": [
+            {
+              "seed": 2016023700,
+              "outcome": "ok",
+              "seconds": 461.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 38,
+          "attempts": [
+            {
+              "seed": 2016023800,
+              "outcome": "ok",
+              "seconds": 245.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 39,
+          "attempts": [
+            {
+              "seed": 2016023900,
+              "outcome": "ok",
+              "seconds": 358.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 40,
+          "attempts": [
+            {
+              "seed": 2016024000,
+              "outcome": "ok",
+              "seconds": 317.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 41,
+          "attempts": [
+            {
+              "seed": 2016024100,
+              "outcome": "ok",
+              "seconds": 293.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 42,
+          "attempts": [
+            {
+              "seed": 2016024200,
+              "outcome": "timeout",
+              "seconds": 600.3
+            },
+            {
+              "seed": 2016024201,
+              "outcome": "ok",
+              "seconds": 373.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 43,
+          "attempts": [
+            {
+              "seed": 2016024300,
+              "outcome": "ok",
+              "seconds": 402.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 44,
+          "attempts": [
+            {
+              "seed": 2016024400,
+              "outcome": "ok",
+              "seconds": 345.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 45,
+          "attempts": [
+            {
+              "seed": 2016024500,
+              "outcome": "ok",
+              "seconds": 472.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 46,
+          "attempts": [
+            {
+              "seed": 2016024600,
+              "outcome": "ok",
+              "seconds": 448.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 47,
+          "attempts": [
+            {
+              "seed": 2016024700,
+              "outcome": "ok",
+              "seconds": 513.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 48,
+          "attempts": [
+            {
+              "seed": 2016024800,
+              "outcome": "ok",
+              "seconds": 410.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 49,
+          "attempts": [
+            {
+              "seed": 2016024900,
+              "outcome": "ok",
+              "seconds": 283.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 50,
+          "attempts": [
+            {
+              "seed": 2016025000,
+              "outcome": "ok",
+              "seconds": 231.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 51,
+          "attempts": [
+            {
+              "seed": 2016025100,
+              "outcome": "ok",
+              "seconds": 228.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 52,
+          "attempts": [
+            {
+              "seed": 2016025200,
+              "outcome": "ok",
+              "seconds": 476.7
+            }
+          ],
+          "availability_success": true
+        }
+      ]
+    },
+    {
+      "asset_id": "load:20",
+      "bus": 8,
+      "simbench_profile": "HLS_A_22.0",
+      "nominal_power_kw": 22.0,
+      "annual_energy_mwh": 1.310308,
+      "driver": "freetime",
+      "vehicle": [
+        "Hyundai",
+        "KONA Electric 64 kWh",
+        2019
+      ],
+      "battery_capacity_kwh": 64.0,
+      "charging_eff": 0.9,
+      "file": "load_20.parquet",
+      "sha256": "3c561c73d9ffa3ee9fe7acf32fa819f5fd17b1ffcd1b8621d4b838af5df6d73e",
+      "weeks": [
+        {
+          "week": 0,
+          "attempts": [
+            {
+              "seed": 2016030000,
+              "outcome": "failed",
+              "seconds": 174.7
+            },
+            {
+              "seed": 2016030001,
+              "outcome": "ok",
+              "seconds": 82.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 1,
+          "attempts": [
+            {
+              "seed": 2016030100,
+              "outcome": "ok",
+              "seconds": 164.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 2,
+          "attempts": [
+            {
+              "seed": 2016030200,
+              "outcome": "ok",
+              "seconds": 140.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 3,
+          "attempts": [
+            {
+              "seed": 2016030300,
+              "outcome": "ok",
+              "seconds": 139.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 4,
+          "attempts": [
+            {
+              "seed": 2016030400,
+              "outcome": "ok",
+              "seconds": 122.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 5,
+          "attempts": [
+            {
+              "seed": 2016030500,
+              "outcome": "ok",
+              "seconds": 113.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 6,
+          "attempts": [
+            {
+              "seed": 2016030600,
+              "outcome": "ok",
+              "seconds": 102.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 7,
+          "attempts": [
+            {
+              "seed": 2016030700,
+              "outcome": "ok",
+              "seconds": 110.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 8,
+          "attempts": [
+            {
+              "seed": 2016030800,
+              "outcome": "ok",
+              "seconds": 107.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 9,
+          "attempts": [
+            {
+              "seed": 2016030900,
+              "outcome": "ok",
+              "seconds": 96.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 10,
+          "attempts": [
+            {
+              "seed": 2016031000,
+              "outcome": "ok",
+              "seconds": 91.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 11,
+          "attempts": [
+            {
+              "seed": 2016031100,
+              "outcome": "ok",
+              "seconds": 82.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 12,
+          "attempts": [
+            {
+              "seed": 2016031200,
+              "outcome": "failed",
+              "seconds": 81.3
+            },
+            {
+              "seed": 2016031201,
+              "outcome": "ok",
+              "seconds": 56.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 13,
+          "attempts": [
+            {
+              "seed": 2016031300,
+              "outcome": "ok",
+              "seconds": 50.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 14,
+          "attempts": [
+            {
+              "seed": 2016031400,
+              "outcome": "ok",
+              "seconds": 54.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 15,
+          "attempts": [
+            {
+              "seed": 2016031500,
+              "outcome": "ok",
+              "seconds": 50.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 16,
+          "attempts": [
+            {
+              "seed": 2016031600,
+              "outcome": "ok",
+              "seconds": 74.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 17,
+          "attempts": [
+            {
+              "seed": 2016031700,
+              "outcome": "ok",
+              "seconds": 77.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 18,
+          "attempts": [
+            {
+              "seed": 2016031800,
+              "outcome": "ok",
+              "seconds": 54.4
+            }
+          ],
+          "availability_success": false
+        },
+        {
+          "week": 19,
+          "attempts": [
+            {
+              "seed": 2016031900,
+              "outcome": "ok",
+              "seconds": 70.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 20,
+          "attempts": [
+            {
+              "seed": 2016032000,
+              "outcome": "ok",
+              "seconds": 58.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 21,
+          "attempts": [
+            {
+              "seed": 2016032100,
+              "outcome": "ok",
+              "seconds": 55.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 22,
+          "attempts": [
+            {
+              "seed": 2016032200,
+              "outcome": "ok",
+              "seconds": 59.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 23,
+          "attempts": [
+            {
+              "seed": 2016032300,
+              "outcome": "ok",
+              "seconds": 62.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 24,
+          "attempts": [
+            {
+              "seed": 2016032400,
+              "outcome": "ok",
+              "seconds": 61.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 25,
+          "attempts": [
+            {
+              "seed": 2016032500,
+              "outcome": "ok",
+              "seconds": 78.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 26,
+          "attempts": [
+            {
+              "seed": 2016032600,
+              "outcome": "ok",
+              "seconds": 61.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 27,
+          "attempts": [
+            {
+              "seed": 2016032700,
+              "outcome": "ok",
+              "seconds": 73.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 28,
+          "attempts": [
+            {
+              "seed": 2016032800,
+              "outcome": "ok",
+              "seconds": 69.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 29,
+          "attempts": [
+            {
+              "seed": 2016032900,
+              "outcome": "ok",
+              "seconds": 58.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 30,
+          "attempts": [
+            {
+              "seed": 2016033000,
+              "outcome": "ok",
+              "seconds": 63.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 31,
+          "attempts": [
+            {
+              "seed": 2016033100,
+              "outcome": "ok",
+              "seconds": 56.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 32,
+          "attempts": [
+            {
+              "seed": 2016033200,
+              "outcome": "ok",
+              "seconds": 55.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 33,
+          "attempts": [
+            {
+              "seed": 2016033300,
+              "outcome": "ok",
+              "seconds": 48.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 34,
+          "attempts": [
+            {
+              "seed": 2016033400,
+              "outcome": "ok",
+              "seconds": 46.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 35,
+          "attempts": [
+            {
+              "seed": 2016033500,
+              "outcome": "ok",
+              "seconds": 43.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 36,
+          "attempts": [
+            {
+              "seed": 2016033600,
+              "outcome": "ok",
+              "seconds": 42.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 37,
+          "attempts": [
+            {
+              "seed": 2016033700,
+              "outcome": "ok",
+              "seconds": 34.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 38,
+          "attempts": [
+            {
+              "seed": 2016033800,
+              "outcome": "ok",
+              "seconds": 42.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 39,
+          "attempts": [
+            {
+              "seed": 2016033900,
+              "outcome": "ok",
+              "seconds": 59.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 40,
+          "attempts": [
+            {
+              "seed": 2016034000,
+              "outcome": "ok",
+              "seconds": 43.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 41,
+          "attempts": [
+            {
+              "seed": 2016034100,
+              "outcome": "ok",
+              "seconds": 43.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 42,
+          "attempts": [
+            {
+              "seed": 2016034200,
+              "outcome": "ok",
+              "seconds": 49.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 43,
+          "attempts": [
+            {
+              "seed": 2016034300,
+              "outcome": "ok",
+              "seconds": 40.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 44,
+          "attempts": [
+            {
+              "seed": 2016034400,
+              "outcome": "ok",
+              "seconds": 47.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 45,
+          "attempts": [
+            {
+              "seed": 2016034500,
+              "outcome": "ok",
+              "seconds": 53.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 46,
+          "attempts": [
+            {
+              "seed": 2016034600,
+              "outcome": "ok",
+              "seconds": 54.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 47,
+          "attempts": [
+            {
+              "seed": 2016034700,
+              "outcome": "ok",
+              "seconds": 39.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 48,
+          "attempts": [
+            {
+              "seed": 2016034800,
+              "outcome": "ok",
+              "seconds": 44.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 49,
+          "attempts": [
+            {
+              "seed": 2016034900,
+              "outcome": "ok",
+              "seconds": 46.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 50,
+          "attempts": [
+            {
+              "seed": 2016035000,
+              "outcome": "ok",
+              "seconds": 54.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 51,
+          "attempts": [
+            {
+              "seed": 2016035100,
+              "outcome": "ok",
+              "seconds": 39.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 52,
+          "attempts": [
+            {
+              "seed": 2016035200,
+              "outcome": "ok",
+              "seconds": 53.4
+            }
+          ],
+          "availability_success": true
+        }
+      ]
+    },
+    {
+      "asset_id": "load:21",
+      "bus": 14,
+      "simbench_profile": "HLS_A_11.0",
+      "nominal_power_kw": 11.0,
+      "annual_energy_mwh": 1.356184,
+      "driver": "fulltime",
+      "vehicle": [
+        "Tesla",
+        "Model 3 Long Range AWD",
+        2020
+      ],
+      "battery_capacity_kwh": 79.5,
+      "charging_eff": 0.9,
+      "file": "load_21.parquet",
+      "sha256": "d07f43d1cb34f3988521e381803ebc07f1a176700a473c2f15fb61fecf4201ca",
+      "weeks": [
+        {
+          "week": 0,
+          "attempts": [
+            {
+              "seed": 2016040000,
+              "outcome": "ok",
+              "seconds": 46.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 1,
+          "attempts": [
+            {
+              "seed": 2016040100,
+              "outcome": "ok",
+              "seconds": 286.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 2,
+          "attempts": [
+            {
+              "seed": 2016040200,
+              "outcome": "ok",
+              "seconds": 308.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 3,
+          "attempts": [
+            {
+              "seed": 2016040300,
+              "outcome": "ok",
+              "seconds": 463.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 4,
+          "attempts": [
+            {
+              "seed": 2016040400,
+              "outcome": "ok",
+              "seconds": 429.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 5,
+          "attempts": [
+            {
+              "seed": 2016040500,
+              "outcome": "ok",
+              "seconds": 157.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 6,
+          "attempts": [
+            {
+              "seed": 2016040600,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016040601,
+              "outcome": "ok",
+              "seconds": 204.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 7,
+          "attempts": [
+            {
+              "seed": 2016040700,
+              "outcome": "ok",
+              "seconds": 245.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 8,
+          "attempts": [
+            {
+              "seed": 2016040800,
+              "outcome": "ok",
+              "seconds": 157.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 9,
+          "attempts": [
+            {
+              "seed": 2016040900,
+              "outcome": "ok",
+              "seconds": 112.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 10,
+          "attempts": [
+            {
+              "seed": 2016041000,
+              "outcome": "ok",
+              "seconds": 82.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 11,
+          "attempts": [
+            {
+              "seed": 2016041100,
+              "outcome": "timeout",
+              "seconds": 600.3
+            },
+            {
+              "seed": 2016041101,
+              "outcome": "ok",
+              "seconds": 219.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 12,
+          "attempts": [
+            {
+              "seed": 2016041200,
+              "outcome": "ok",
+              "seconds": 390.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 13,
+          "attempts": [
+            {
+              "seed": 2016041300,
+              "outcome": "ok",
+              "seconds": 255.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 14,
+          "attempts": [
+            {
+              "seed": 2016041400,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016041401,
+              "outcome": "ok",
+              "seconds": 564.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 15,
+          "attempts": [
+            {
+              "seed": 2016041500,
+              "outcome": "ok",
+              "seconds": 446.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 16,
+          "attempts": [
+            {
+              "seed": 2016041600,
+              "outcome": "timeout",
+              "seconds": 600.4
+            },
+            {
+              "seed": 2016041601,
+              "outcome": "timeout",
+              "seconds": 600.1
+            },
+            {
+              "seed": 2016041602,
+              "outcome": "ok",
+              "seconds": 379.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 17,
+          "attempts": [
+            {
+              "seed": 2016041700,
+              "outcome": "timeout",
+              "seconds": 600.3
+            },
+            {
+              "seed": 2016041701,
+              "outcome": "ok",
+              "seconds": 134.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 18,
+          "attempts": [
+            {
+              "seed": 2016041800,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016041801,
+              "outcome": "ok",
+              "seconds": 148.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 19,
+          "attempts": [
+            {
+              "seed": 2016041900,
+              "outcome": "ok",
+              "seconds": 451.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 20,
+          "attempts": [
+            {
+              "seed": 2016042000,
+              "outcome": "timeout",
+              "seconds": 600.3
+            },
+            {
+              "seed": 2016042001,
+              "outcome": "ok",
+              "seconds": 404.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 21,
+          "attempts": [
+            {
+              "seed": 2016042100,
+              "outcome": "timeout",
+              "seconds": 600.3
+            },
+            {
+              "seed": 2016042101,
+              "outcome": "ok",
+              "seconds": 186.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 22,
+          "attempts": [
+            {
+              "seed": 2016042200,
+              "outcome": "ok",
+              "seconds": 314.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 23,
+          "attempts": [
+            {
+              "seed": 2016042300,
+              "outcome": "ok",
+              "seconds": 213.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 24,
+          "attempts": [
+            {
+              "seed": 2016042400,
+              "outcome": "ok",
+              "seconds": 181.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 25,
+          "attempts": [
+            {
+              "seed": 2016042500,
+              "outcome": "ok",
+              "seconds": 200.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 26,
+          "attempts": [
+            {
+              "seed": 2016042600,
+              "outcome": "ok",
+              "seconds": 268.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 27,
+          "attempts": [
+            {
+              "seed": 2016042700,
+              "outcome": "ok",
+              "seconds": 596.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 28,
+          "attempts": [
+            {
+              "seed": 2016042800,
+              "outcome": "ok",
+              "seconds": 69.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 29,
+          "attempts": [
+            {
+              "seed": 2016042900,
+              "outcome": "ok",
+              "seconds": 57.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 30,
+          "attempts": [
+            {
+              "seed": 2016043000,
+              "outcome": "ok",
+              "seconds": 130.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 31,
+          "attempts": [
+            {
+              "seed": 2016043100,
+              "outcome": "ok",
+              "seconds": 161.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 32,
+          "attempts": [
+            {
+              "seed": 2016043200,
+              "outcome": "ok",
+              "seconds": 522.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 33,
+          "attempts": [
+            {
+              "seed": 2016043300,
+              "outcome": "ok",
+              "seconds": 93.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 34,
+          "attempts": [
+            {
+              "seed": 2016043400,
+              "outcome": "ok",
+              "seconds": 134.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 35,
+          "attempts": [
+            {
+              "seed": 2016043500,
+              "outcome": "ok",
+              "seconds": 103.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 36,
+          "attempts": [
+            {
+              "seed": 2016043600,
+              "outcome": "ok",
+              "seconds": 255.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 37,
+          "attempts": [
+            {
+              "seed": 2016043700,
+              "outcome": "ok",
+              "seconds": 252.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 38,
+          "attempts": [
+            {
+              "seed": 2016043800,
+              "outcome": "ok",
+              "seconds": 228.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 39,
+          "attempts": [
+            {
+              "seed": 2016043900,
+              "outcome": "ok",
+              "seconds": 254.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 40,
+          "attempts": [
+            {
+              "seed": 2016044000,
+              "outcome": "ok",
+              "seconds": 240.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 41,
+          "attempts": [
+            {
+              "seed": 2016044100,
+              "outcome": "ok",
+              "seconds": 131.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 42,
+          "attempts": [
+            {
+              "seed": 2016044200,
+              "outcome": "ok",
+              "seconds": 328.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 43,
+          "attempts": [
+            {
+              "seed": 2016044300,
+              "outcome": "ok",
+              "seconds": 272.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 44,
+          "attempts": [
+            {
+              "seed": 2016044400,
+              "outcome": "ok",
+              "seconds": 438.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 45,
+          "attempts": [
+            {
+              "seed": 2016044500,
+              "outcome": "ok",
+              "seconds": 115.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 46,
+          "attempts": [
+            {
+              "seed": 2016044600,
+              "outcome": "ok",
+              "seconds": 220.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 47,
+          "attempts": [
+            {
+              "seed": 2016044700,
+              "outcome": "timeout",
+              "seconds": 600.4
+            },
+            {
+              "seed": 2016044701,
+              "outcome": "ok",
+              "seconds": 251.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 48,
+          "attempts": [
+            {
+              "seed": 2016044800,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016044801,
+              "outcome": "ok",
+              "seconds": 58.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 49,
+          "attempts": [
+            {
+              "seed": 2016044900,
+              "outcome": "ok",
+              "seconds": 294.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 50,
+          "attempts": [
+            {
+              "seed": 2016045000,
+              "outcome": "ok",
+              "seconds": 105.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 51,
+          "attempts": [
+            {
+              "seed": 2016045100,
+              "outcome": "ok",
+              "seconds": 233.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 52,
+          "attempts": [
+            {
+              "seed": 2016045200,
+              "outcome": "ok",
+              "seconds": 585.7
+            }
+          ],
+          "availability_success": true
+        }
+      ]
+    },
+    {
+      "asset_id": "load:23",
+      "bus": 11,
+      "simbench_profile": "HLS_A_22.0",
+      "nominal_power_kw": 22.0,
+      "annual_energy_mwh": 1.310308,
+      "driver": "fulltime",
+      "vehicle": [
+        "Hyundai",
+        "KONA Electric 64 kWh",
+        2019
+      ],
+      "battery_capacity_kwh": 64.0,
+      "charging_eff": 0.9,
+      "file": "load_23.parquet",
+      "sha256": "3b56feaee772d05e1c22b5b5b23fdc66cd3246faa8ffd3a0491994c85a5c4ef7",
+      "weeks": [
+        {
+          "week": 0,
+          "attempts": [
+            {
+              "seed": 2016050000,
+              "outcome": "ok",
+              "seconds": 562.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 1,
+          "attempts": [
+            {
+              "seed": 2016050100,
+              "outcome": "ok",
+              "seconds": 114.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 2,
+          "attempts": [
+            {
+              "seed": 2016050200,
+              "outcome": "ok",
+              "seconds": 53.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 3,
+          "attempts": [
+            {
+              "seed": 2016050300,
+              "outcome": "ok",
+              "seconds": 160.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 4,
+          "attempts": [
+            {
+              "seed": 2016050400,
+              "outcome": "ok",
+              "seconds": 275.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 5,
+          "attempts": [
+            {
+              "seed": 2016050500,
+              "outcome": "timeout",
+              "seconds": 600.1
+            },
+            {
+              "seed": 2016050501,
+              "outcome": "ok",
+              "seconds": 312.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 6,
+          "attempts": [
+            {
+              "seed": 2016050600,
+              "outcome": "timeout",
+              "seconds": 600.1
+            },
+            {
+              "seed": 2016050601,
+              "outcome": "ok",
+              "seconds": 117.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 7,
+          "attempts": [
+            {
+              "seed": 2016050700,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016050701,
+              "outcome": "ok",
+              "seconds": 207.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 8,
+          "attempts": [
+            {
+              "seed": 2016050800,
+              "outcome": "ok",
+              "seconds": 335.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 9,
+          "attempts": [
+            {
+              "seed": 2016050900,
+              "outcome": "ok",
+              "seconds": 102.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 10,
+          "attempts": [
+            {
+              "seed": 2016051000,
+              "outcome": "ok",
+              "seconds": 299.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 11,
+          "attempts": [
+            {
+              "seed": 2016051100,
+              "outcome": "ok",
+              "seconds": 173.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 12,
+          "attempts": [
+            {
+              "seed": 2016051200,
+              "outcome": "ok",
+              "seconds": 305.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 13,
+          "attempts": [
+            {
+              "seed": 2016051300,
+              "outcome": "ok",
+              "seconds": 100.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 14,
+          "attempts": [
+            {
+              "seed": 2016051400,
+              "outcome": "ok",
+              "seconds": 288.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 15,
+          "attempts": [
+            {
+              "seed": 2016051500,
+              "outcome": "timeout",
+              "seconds": 600.3
+            },
+            {
+              "seed": 2016051501,
+              "outcome": "ok",
+              "seconds": 224.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 16,
+          "attempts": [
+            {
+              "seed": 2016051600,
+              "outcome": "ok",
+              "seconds": 270.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 17,
+          "attempts": [
+            {
+              "seed": 2016051700,
+              "outcome": "ok",
+              "seconds": 139.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 18,
+          "attempts": [
+            {
+              "seed": 2016051800,
+              "outcome": "timeout",
+              "seconds": 600.3
+            },
+            {
+              "seed": 2016051801,
+              "outcome": "ok",
+              "seconds": 208.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 19,
+          "attempts": [
+            {
+              "seed": 2016051900,
+              "outcome": "ok",
+              "seconds": 341.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 20,
+          "attempts": [
+            {
+              "seed": 2016052000,
+              "outcome": "ok",
+              "seconds": 109.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 21,
+          "attempts": [
+            {
+              "seed": 2016052100,
+              "outcome": "timeout",
+              "seconds": 600.1
+            },
+            {
+              "seed": 2016052101,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016052102,
+              "outcome": "ok",
+              "seconds": 469.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 22,
+          "attempts": [
+            {
+              "seed": 2016052200,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016052201,
+              "outcome": "ok",
+              "seconds": 49.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 23,
+          "attempts": [
+            {
+              "seed": 2016052300,
+              "outcome": "ok",
+              "seconds": 117.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 24,
+          "attempts": [
+            {
+              "seed": 2016052400,
+              "outcome": "ok",
+              "seconds": 400.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 25,
+          "attempts": [
+            {
+              "seed": 2016052500,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016052501,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016052502,
+              "outcome": "ok",
+              "seconds": 166.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 26,
+          "attempts": [
+            {
+              "seed": 2016052600,
+              "outcome": "timeout",
+              "seconds": 600.4
+            },
+            {
+              "seed": 2016052601,
+              "outcome": "ok",
+              "seconds": 156.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 27,
+          "attempts": [
+            {
+              "seed": 2016052700,
+              "outcome": "ok",
+              "seconds": 227.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 28,
+          "attempts": [
+            {
+              "seed": 2016052800,
+              "outcome": "ok",
+              "seconds": 89.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 29,
+          "attempts": [
+            {
+              "seed": 2016052900,
+              "outcome": "ok",
+              "seconds": 46.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 30,
+          "attempts": [
+            {
+              "seed": 2016053000,
+              "outcome": "ok",
+              "seconds": 590.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 31,
+          "attempts": [
+            {
+              "seed": 2016053100,
+              "outcome": "timeout",
+              "seconds": 600.4
+            },
+            {
+              "seed": 2016053101,
+              "outcome": "ok",
+              "seconds": 99.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 32,
+          "attempts": [
+            {
+              "seed": 2016053200,
+              "outcome": "ok",
+              "seconds": 62.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 33,
+          "attempts": [
+            {
+              "seed": 2016053300,
+              "outcome": "ok",
+              "seconds": 324.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 34,
+          "attempts": [
+            {
+              "seed": 2016053400,
+              "outcome": "ok",
+              "seconds": 106.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 35,
+          "attempts": [
+            {
+              "seed": 2016053500,
+              "outcome": "ok",
+              "seconds": 323.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 36,
+          "attempts": [
+            {
+              "seed": 2016053600,
+              "outcome": "ok",
+              "seconds": 163.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 37,
+          "attempts": [
+            {
+              "seed": 2016053700,
+              "outcome": "ok",
+              "seconds": 294.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 38,
+          "attempts": [
+            {
+              "seed": 2016053800,
+              "outcome": "ok",
+              "seconds": 475.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 39,
+          "attempts": [
+            {
+              "seed": 2016053900,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016053901,
+              "outcome": "timeout",
+              "seconds": 600.1
+            },
+            {
+              "seed": 2016053902,
+              "outcome": "ok",
+              "seconds": 238.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 40,
+          "attempts": [
+            {
+              "seed": 2016054000,
+              "outcome": "ok",
+              "seconds": 448.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 41,
+          "attempts": [
+            {
+              "seed": 2016054100,
+              "outcome": "ok",
+              "seconds": 493.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 42,
+          "attempts": [
+            {
+              "seed": 2016054200,
+              "outcome": "ok",
+              "seconds": 160.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 43,
+          "attempts": [
+            {
+              "seed": 2016054300,
+              "outcome": "ok",
+              "seconds": 211.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 44,
+          "attempts": [
+            {
+              "seed": 2016054400,
+              "outcome": "ok",
+              "seconds": 119.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 45,
+          "attempts": [
+            {
+              "seed": 2016054500,
+              "outcome": "ok",
+              "seconds": 237.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 46,
+          "attempts": [
+            {
+              "seed": 2016054600,
+              "outcome": "ok",
+              "seconds": 320.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 47,
+          "attempts": [
+            {
+              "seed": 2016054700,
+              "outcome": "ok",
+              "seconds": 311.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 48,
+          "attempts": [
+            {
+              "seed": 2016054800,
+              "outcome": "ok",
+              "seconds": 103.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 49,
+          "attempts": [
+            {
+              "seed": 2016054900,
+              "outcome": "ok",
+              "seconds": 164.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 50,
+          "attempts": [
+            {
+              "seed": 2016055000,
+              "outcome": "ok",
+              "seconds": 259.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 51,
+          "attempts": [
+            {
+              "seed": 2016055100,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016055101,
+              "outcome": "ok",
+              "seconds": 189.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 52,
+          "attempts": [
+            {
+              "seed": 2016055200,
+              "outcome": "ok",
+              "seconds": 245.0
+            }
+          ],
+          "availability_success": true
+        }
+      ]
+    },
+    {
+      "asset_id": "load:24",
+      "bus": 5,
+      "simbench_profile": "HLS_A_3.7",
+      "nominal_power_kw": 3.7,
+      "annual_energy_mwh": 0.996421,
+      "driver": "fulltime",
+      "vehicle": [
+        "Renault",
+        "Zoe Q90",
+        2019
+      ],
+      "battery_capacity_kwh": 45.61,
+      "charging_eff": 0.9,
+      "file": "load_24.parquet",
+      "sha256": "8538531f2b44dee82dfe17cc38cf0c3a665d4066aa976de36bf556bdab800de4",
+      "weeks": [
+        {
+          "week": 0,
+          "attempts": [
+            {
+              "seed": 2016060000,
+              "outcome": "ok",
+              "seconds": 132.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 1,
+          "attempts": [
+            {
+              "seed": 2016060100,
+              "outcome": "ok",
+              "seconds": 221.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 2,
+          "attempts": [
+            {
+              "seed": 2016060200,
+              "outcome": "ok",
+              "seconds": 80.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 3,
+          "attempts": [
+            {
+              "seed": 2016060300,
+              "outcome": "ok",
+              "seconds": 65.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 4,
+          "attempts": [
+            {
+              "seed": 2016060400,
+              "outcome": "ok",
+              "seconds": 213.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 5,
+          "attempts": [
+            {
+              "seed": 2016060500,
+              "outcome": "ok",
+              "seconds": 186.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 6,
+          "attempts": [
+            {
+              "seed": 2016060600,
+              "outcome": "ok",
+              "seconds": 159.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 7,
+          "attempts": [
+            {
+              "seed": 2016060700,
+              "outcome": "failed",
+              "seconds": 477.2
+            },
+            {
+              "seed": 2016060701,
+              "outcome": "ok",
+              "seconds": 329.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 8,
+          "attempts": [
+            {
+              "seed": 2016060800,
+              "outcome": "timeout",
+              "seconds": 600.3
+            },
+            {
+              "seed": 2016060801,
+              "outcome": "ok",
+              "seconds": 45.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 9,
+          "attempts": [
+            {
+              "seed": 2016060900,
+              "outcome": "timeout",
+              "seconds": 600.1
+            },
+            {
+              "seed": 2016060901,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016060902,
+              "outcome": "ok",
+              "seconds": 287.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 10,
+          "attempts": [
+            {
+              "seed": 2016061000,
+              "outcome": "ok",
+              "seconds": 330.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 11,
+          "attempts": [
+            {
+              "seed": 2016061100,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016061101,
+              "outcome": "ok",
+              "seconds": 406.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 12,
+          "attempts": [
+            {
+              "seed": 2016061200,
+              "outcome": "ok",
+              "seconds": 228.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 13,
+          "attempts": [
+            {
+              "seed": 2016061300,
+              "outcome": "ok",
+              "seconds": 143.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 14,
+          "attempts": [
+            {
+              "seed": 2016061400,
+              "outcome": "ok",
+              "seconds": 71.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 15,
+          "attempts": [
+            {
+              "seed": 2016061500,
+              "outcome": "ok",
+              "seconds": 143.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 16,
+          "attempts": [
+            {
+              "seed": 2016061600,
+              "outcome": "ok",
+              "seconds": 129.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 17,
+          "attempts": [
+            {
+              "seed": 2016061700,
+              "outcome": "ok",
+              "seconds": 414.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 18,
+          "attempts": [
+            {
+              "seed": 2016061800,
+              "outcome": "ok",
+              "seconds": 335.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 19,
+          "attempts": [
+            {
+              "seed": 2016061900,
+              "outcome": "ok",
+              "seconds": 166.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 20,
+          "attempts": [
+            {
+              "seed": 2016062000,
+              "outcome": "ok",
+              "seconds": 213.9
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 21,
+          "attempts": [
+            {
+              "seed": 2016062100,
+              "outcome": "ok",
+              "seconds": 294.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 22,
+          "attempts": [
+            {
+              "seed": 2016062200,
+              "outcome": "ok",
+              "seconds": 124.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 23,
+          "attempts": [
+            {
+              "seed": 2016062300,
+              "outcome": "ok",
+              "seconds": 212.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 24,
+          "attempts": [
+            {
+              "seed": 2016062400,
+              "outcome": "ok",
+              "seconds": 276.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 25,
+          "attempts": [
+            {
+              "seed": 2016062500,
+              "outcome": "ok",
+              "seconds": 410.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 26,
+          "attempts": [
+            {
+              "seed": 2016062600,
+              "outcome": "ok",
+              "seconds": 116.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 27,
+          "attempts": [
+            {
+              "seed": 2016062700,
+              "outcome": "ok",
+              "seconds": 73.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 28,
+          "attempts": [
+            {
+              "seed": 2016062800,
+              "outcome": "ok",
+              "seconds": 60.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 29,
+          "attempts": [
+            {
+              "seed": 2016062900,
+              "outcome": "timeout",
+              "seconds": 600.4
+            },
+            {
+              "seed": 2016062901,
+              "outcome": "ok",
+              "seconds": 101.4
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 30,
+          "attempts": [
+            {
+              "seed": 2016063000,
+              "outcome": "ok",
+              "seconds": 526.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 31,
+          "attempts": [
+            {
+              "seed": 2016063100,
+              "outcome": "ok",
+              "seconds": 219.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 32,
+          "attempts": [
+            {
+              "seed": 2016063200,
+              "outcome": "ok",
+              "seconds": 272.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 33,
+          "attempts": [
+            {
+              "seed": 2016063300,
+              "outcome": "timeout",
+              "seconds": 600.1
+            },
+            {
+              "seed": 2016063301,
+              "outcome": "ok",
+              "seconds": 39.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 34,
+          "attempts": [
+            {
+              "seed": 2016063400,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016063401,
+              "outcome": "ok",
+              "seconds": 382.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 35,
+          "attempts": [
+            {
+              "seed": 2016063500,
+              "outcome": "ok",
+              "seconds": 271.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 36,
+          "attempts": [
+            {
+              "seed": 2016063600,
+              "outcome": "ok",
+              "seconds": 54.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 37,
+          "attempts": [
+            {
+              "seed": 2016063700,
+              "outcome": "timeout",
+              "seconds": 600.2
+            },
+            {
+              "seed": 2016063701,
+              "outcome": "ok",
+              "seconds": 460.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 38,
+          "attempts": [
+            {
+              "seed": 2016063800,
+              "outcome": "ok",
+              "seconds": 102.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 39,
+          "attempts": [
+            {
+              "seed": 2016063900,
+              "outcome": "ok",
+              "seconds": 517.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 40,
+          "attempts": [
+            {
+              "seed": 2016064000,
+              "outcome": "timeout",
+              "seconds": 600.1
+            },
+            {
+              "seed": 2016064001,
+              "outcome": "ok",
+              "seconds": 127.6
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 41,
+          "attempts": [
+            {
+              "seed": 2016064100,
+              "outcome": "ok",
+              "seconds": 332.5
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 42,
+          "attempts": [
+            {
+              "seed": 2016064200,
+              "outcome": "ok",
+              "seconds": 64.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 43,
+          "attempts": [
+            {
+              "seed": 2016064300,
+              "outcome": "timeout",
+              "seconds": 600.1
+            },
+            {
+              "seed": 2016064301,
+              "outcome": "ok",
+              "seconds": 304.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 44,
+          "attempts": [
+            {
+              "seed": 2016064400,
+              "outcome": "ok",
+              "seconds": 403.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 45,
+          "attempts": [
+            {
+              "seed": 2016064500,
+              "outcome": "ok",
+              "seconds": 589.1
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 46,
+          "attempts": [
+            {
+              "seed": 2016064600,
+              "outcome": "ok",
+              "seconds": 55.3
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 47,
+          "attempts": [
+            {
+              "seed": 2016064700,
+              "outcome": "ok",
+              "seconds": 208.2
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 48,
+          "attempts": [
+            {
+              "seed": 2016064800,
+              "outcome": "timeout",
+              "seconds": 600.1
+            },
+            {
+              "seed": 2016064801,
+              "outcome": "ok",
+              "seconds": 42.0
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 49,
+          "attempts": [
+            {
+              "seed": 2016064900,
+              "outcome": "ok",
+              "seconds": 85.8
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 50,
+          "attempts": [
+            {
+              "seed": 2016065000,
+              "outcome": "ok",
+              "seconds": 540.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 51,
+          "attempts": [
+            {
+              "seed": 2016065100,
+              "outcome": "ok",
+              "seconds": 92.7
+            }
+          ],
+          "availability_success": true
+        },
+        {
+          "week": 52,
+          "attempts": [
+            {
+              "seed": 2016065200,
+              "outcome": "timeout",
+              "seconds": 600.0
+            },
+            {
+              "seed": 2016065201,
+              "outcome": "ok",
+              "seconds": 19.5
+            }
+          ],
+          "availability_success": true
+        }
+      ]
+    }
+  ],
+  "retries_by_driver": {
+    "freetime": {
+      "retries": 2,
+      "weeks": 106
+    },
+    "fulltime": {
+      "retries": 56,
+      "weeks": 265
+    }
+  }
+}

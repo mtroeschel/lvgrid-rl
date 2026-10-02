@@ -72,10 +72,18 @@ file per charge point and a `manifest.json` with versions, seeds, driver types,
 vehicle models, every retry, and the SHA-256 of each file. The project reads
 these files only and verifies them against the manifest.
 
-    uv run python scripts/list_charge_points.py      # project env: configs/ev/charge_points.json
-    cd tools/emobpy && uv sync --locked && uv run python generate.py
+**The manifest of the dataset in use is committed**
+(`configs/ev/emobpy-2016-home-only.manifest.json`): it is the only input needed
+to reproduce the data bit for bit. A fresh run chooses its seeds under a time
+limit, which depends on the machine; a replay takes every week's seed from the
+manifest and runs without a limit.
 
-A full run (7 charge points, 53 weeks) takes about two hours on 12 workers.
+    cd tools/emobpy && uv sync --locked
+    uv run python generate.py --replay ../../configs/ev/emobpy-2016-home-only.manifest.json
+
+A replay takes about 1.5 hours on 12 workers. A fresh run (new seeds selected,
+`uv run python generate.py` after `scripts/list_charge_points.py`) takes about
+2.5 hours; its manifest then has to be committed in place of the old one.
 emobpy (MIT licence) uses the mobility statistics of *Mobilität in Deutschland*
 2017 and ERA5 weather; cite Gaete-Morales et al. (2021), Scientific Data 8:152.
 

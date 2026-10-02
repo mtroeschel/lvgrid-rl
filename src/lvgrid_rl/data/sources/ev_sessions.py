@@ -99,23 +99,32 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def read_emobpy_run(run_dir: Path | str) -> dict[str, EmobpyVehicle]:
-    """Read the vehicle-years of one tool run, verified against the manifest.
+def read_emobpy_run(
+    run_dir: Path | str, manifest: Path | str | None = None
+) -> dict[str, EmobpyVehicle]:
+    """Read the vehicle-years of one tool run, verified against a manifest.
+
+    Args:
+        run_dir: The run's directory under ``data/raw/emobpy/``.
+        manifest: The manifest to verify against; by default the run's own.
+            The committed copy (``configs/ev/emobpy-*.manifest.json``) proves
+            the files are the dataset the results were computed on.
 
     Raises:
         FileNotFoundError: if the run is missing, with the command to make it.
         ValueError: if a file's checksum differs from the manifest.
     """
     run_dir = Path(run_dir)
-    manifest_path = run_dir / "manifest.json"
-    if not manifest_path.exists():
+    manifest_path = Path(manifest) if manifest else run_dir / "manifest.json"
+    if not run_dir.is_dir() or not manifest_path.exists():
         raise FileNotFoundError(
-            f"no emobpy run at {run_dir}. Generate it with\n"
-            "    cd tools/emobpy && uv sync --locked && uv run python generate.py"
+            f"no emobpy run at {run_dir}. Reproduce it from its committed manifest:\n"
+            "    cd tools/emobpy && uv sync --locked && uv run python generate.py "
+            "--replay ../../configs/ev/emobpy-<run>.manifest.json"
         )
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    content = json.loads(manifest_path.read_text(encoding="utf-8"))
     out = {}
-    for entry in manifest["charge_points"]:
+    for entry in content["charge_points"]:
         path = run_dir / entry["file"]
         digest = _sha256(path)
         if digest != entry["sha256"]:

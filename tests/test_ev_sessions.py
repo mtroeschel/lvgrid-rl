@@ -135,6 +135,19 @@ def test_a_run_is_read_and_verified(tmp_path) -> None:
     assert vehicles["load:15"].annual_energy_mwh == pytest.approx(1.36)
 
 
+def test_a_run_is_verified_against_a_committed_manifest(tmp_path) -> None:
+    run = tmp_path / "run"
+    run.mkdir()
+    _write_run(run, _emobpy([(72, 48, 11.0, 4)]))
+    committed = tmp_path / "committed.manifest.json"
+    committed.write_text((run / "manifest.json").read_text(encoding="utf-8"))
+    (run / "manifest.json").unlink()
+    assert "load:15" in read_emobpy_run(run, manifest=committed)
+    _write_run(run, _emobpy([(72, 48, 3.7, 4)]))  # other data, own manifest
+    with pytest.raises(ValueError, match="SHA-256"):
+        read_emobpy_run(run, manifest=committed)
+
+
 def test_a_changed_file_fails_the_checksum(tmp_path) -> None:
     _write_run(tmp_path, _emobpy([(72, 48, 11.0, 4)]), sha256="0" * 64)
     with pytest.raises(ValueError, match="SHA-256"):
