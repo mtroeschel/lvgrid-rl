@@ -191,6 +191,7 @@ def test_terms_are_reported_individually() -> None:
         "pv_curtailment",
         "bess_degradation",
         "hp_comfort",
+        "ev_unserved",
         "action_smoothness",
         "grid_losses",
         "en50160_k95",

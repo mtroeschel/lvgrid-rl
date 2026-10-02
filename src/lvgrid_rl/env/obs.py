@@ -134,6 +134,15 @@ ASSET_FEATURES: dict[str, tuple[str, ...]] = {
         "heat_forecast",
         "cop_forecast",
     ),
+    "ev": (
+        "vm_local",
+        "rated_p",
+        "last_p",
+        "connected",
+        "need",
+        "time_left",
+        "laxity",
+    ),
 }
 """Feature names per asset kind. ``forecast`` and ``colocated_pv_forecast``
 expand to one entry per forecast step; every other name is one entry."""
@@ -144,6 +153,31 @@ _EXPANDING = frozenset(
 
 COP_SCALE = 5.0
 """COPs are divided by this, so a typical value reads around 0.7."""
+
+EV_NEED_SCALE_H = 4.0
+"""A vehicle's remaining need is expressed in hours at the charge point's
+rating and divided by this: four hours of full power read 1."""
+
+EV_TIME_SCALE_H = 24.0
+"""Time to departure and laxity are divided by this, a share of a day."""
+
+
+def ev_features(state, rated_p_mw: float) -> tuple[float, float, float, float]:
+    """Connected, need, time left and laxity of a charge point, normalised.
+
+    Laxity is the time to departure minus the time full power would need: how
+    long charging can still wait. Zero for every feature without a vehicle.
+    """
+    if not state.connected:
+        return 0.0, 0.0, 0.0, 0.0
+    need_h = state.need_mwh / rated_p_mw
+    left_h = state.remaining_min / 60.0
+    return (
+        1.0,
+        need_h / EV_NEED_SCALE_H,
+        left_h / EV_TIME_SCALE_H,
+        (left_h - need_h) / EV_TIME_SCALE_H,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +235,9 @@ class ObservationSpec:
         thermal_assets: ``(asset_id, capacity_mwh, cop_key)`` per heat pump:
             buffer fill level, whether it runs, and the current COP join the
             ``asset_state`` group. Empty without heat pumps.
+        ev_assets: ``(asset_id, p_max_mw)`` per charge point: whether a vehicle
+            is connected, its remaining need and the time to its departure
+            join the ``asset_state`` group. Empty without charge points.
         layout: ``flat`` (default, the M3 layout) or ``per_asset``.
         assets: Per-asset feature specifications, in action order. Filled in
             by the environment when left empty; a builder needs them for
@@ -223,6 +260,7 @@ class ObservationSpec:
     power_scale_mw: float = 0.1
     storage_assets: tuple[tuple[str, float], ...] = ()
     thermal_assets: tuple[tuple[str, float, str], ...] = ()
+    ev_assets: tuple[tuple[str, float], ...] = ()
     layout: ObservationLayoutMode = ObservationLayoutMode.FLAT
     assets: tuple[AssetFeatureSpec, ...] = ()
 
@@ -335,13 +373,19 @@ class ObservationBuilder:
         if group is FeatureGroup.LOCAL_POWER:
             return ["local/p_slack_mw", "local/losses_mw"]
         if group is FeatureGroup.ASSET_STATE:
-            return [
-                f"asset/{asset_id}/soc_frac" for asset_id, _ in self.spec.storage_assets
-            ] + [
-                f"asset/{asset_id}/{name}"
-                for asset_id, _, _ in self.spec.thermal_assets
-                for name in ("buffer_frac", "running", "cop")
-            ]
+            return (
+                [f"asset/{asset_id}/soc_frac" for asset_id, _ in self.spec.storage_assets]
+                + [
+                    f"asset/{asset_id}/{name}"
+                    for asset_id, _, _ in self.spec.thermal_assets
+                    for name in ("buffer_frac", "running", "cop")
+                ]
+                + [
+                    f"asset/{asset_id}/{name}"
+                    for asset_id, _ in self.spec.ev_assets
+                    for name in ("connected", "need", "time_left")
+                ]
+            )
         if group is FeatureGroup.PQ_BUDGET:
             return [
                 "pq/budget_used_max",
@@ -433,6 +477,10 @@ class ObservationBuilder:
             elif name == "cop_forecast":
                 series = np.asarray(info.forecast[asset.cop_key][:horizon])
                 values.extend((series / COP_SCALE).tolist())
+            elif name in ("connected", "need", "time_left", "laxity"):
+                features = ev_features(own, asset.rated_p_mw)
+                position = ("connected", "need", "time_left", "laxity").index(name)
+                values.append(features[position])
             elif name == "colocated_pv_forecast":
                 total = np.zeros(horizon)
                 for series in asset.colocated_series:
@@ -497,6 +545,10 @@ class ObservationBuilder:
                     1.0 if own.running else 0.0,
                     float(info.forecast[cop_key][0]) / COP_SCALE,
                 ]
+            # A charge point's decision depends on how much its vehicle still
+            # needs and how long it stays; without them it is not Markovian.
+            for asset_id, p_max_mw in self.spec.ev_assets:
+                values += list(ev_features(state.assets[asset_id], p_max_mw)[:3])
             return np.array(values, dtype=np.float64)
 
         if group is FeatureGroup.PQ_BUDGET:

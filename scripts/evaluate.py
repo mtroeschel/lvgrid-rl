@@ -29,7 +29,7 @@ from lvgrid_rl.baselines.methods import (
     asset_bus_positions,
 )
 from lvgrid_rl.env.episodes import EpisodeMode, EpisodeSpec
-from lvgrid_rl.env.factory import HeatPumpSizing, StorageSizing, make_env
+from lvgrid_rl.env.factory import EvSizing, HeatPumpSizing, StorageSizing, make_env
 from lvgrid_rl.env.lv_grid_env import EnvConfig
 from lvgrid_rl.env.obs import ObservationLayoutMode, ObservationSpec
 from lvgrid_rl.eval.kpi_schema import KPI_SCHEMA, check_kpi_schema
@@ -126,6 +126,8 @@ def main() -> None:
     storage = StorageSizing(**stored) if stored is not None else None
     stored_hp = env_record.get("heat_pumps")
     heat_pumps = HeatPumpSizing(**stored_hp) if stored_hp is not None else None
+    stored_ev = env_record.get("ev")
+    ev = EvSizing(**stored_ev) if stored_ev is not None else None
     obs_layout = ObservationLayoutMode(env_record.get("obs_layout", "flat"))
 
     def build():
@@ -138,6 +140,7 @@ def main() -> None:
             seed=args.seed,
             storage=storage,
             heat_pumps=heat_pumps,
+            ev=ev,
         )
 
     positions = asset_bus_positions(build())
@@ -170,13 +173,18 @@ def main() -> None:
                 f"{args.baselines_from} holds results for set "
                 f"{earlier.get('set')!r}, not {args.set_name!r}"
             )
-        if earlier.get("storage") != stored or earlier.get("heat_pumps") != stored_hp:
+        if (
+            earlier.get("storage") != stored
+            or earlier.get("heat_pumps") != stored_hp
+            or earlier.get("ev") != stored_ev
+        ):
             raise ValueError(
                 f"{args.baselines_from} was evaluated with another asset "
-                "configuration (storage or heat pumps) than this run. Baselines "
-                "differ between configurations -- heat pumps on thermostats draw "
-                "differently from their SimBench profiles -- so recompute them "
-                "for this configuration once and merge from there."
+                "configuration (storage, heat pumps or charge points) than this "
+                "run. Baselines differ between configurations -- heat pumps on "
+                "thermostats and vehicles charging on arrival draw differently "
+                "from their SimBench profiles -- so recompute them for this "
+                "configuration once and merge from there."
             )
         rows.extend(r for r in earlier["results"] if r["controller"] != "policy")
 
@@ -204,6 +212,7 @@ def main() -> None:
                 "kpi_schema": KPI_SCHEMA,
                 "storage": stored,
                 "heat_pumps": stored_hp,
+                "ev": stored_ev,
                 "episode_mode": "evaluate",
                 "baseline_params": tuned,
                 "results": rows,

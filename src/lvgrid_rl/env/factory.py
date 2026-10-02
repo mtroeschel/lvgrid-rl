@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 
 from lvgrid_rl.components.bess import BatteryStorage
+from lvgrid_rl.components.ev_charger import EvCharger
 from lvgrid_rl.components.heat_pump import HeatPump
 from lvgrid_rl.components.pv import PvMode, PvSystem
 from lvgrid_rl.core.schemas import AssetRatings, Interval
@@ -29,6 +30,8 @@ __all__ = [
     "DEFAULT_STORAGE",
     "HeatPumpSizing",
     "DEFAULT_HEAT_PUMPS",
+    "EvSizing",
+    "DEFAULT_EV",
     "make_env",
     "absolute_profiles",
 ]
@@ -115,6 +118,82 @@ class HeatPumpSizing:
 
 DEFAULT_HEAT_PUMPS = HeatPumpSizing()
 """Two hours of rated heat, floor sink, the M4 working configuration (D15)."""
+
+
+@dataclass(frozen=True, slots=True)
+class EvSizing:
+    """How the grid's charge points become controllable (M4, D17).
+
+    Every load with a SimBench ``HLS_*`` profile is replaced by an
+    :class:`EvCharger` at the same element, at the nominal power in the profile
+    name. Its sessions are the emobpy vehicle-year of that charge point, scaled
+    to the annual energy of its SimBench curve in the scenario
+    (:mod:`lvgrid_rl.data.sources.ev_sessions`), so the uncontrolled grid keeps
+    the dataset's energy and gets the vehicles' timing.
+
+    Args:
+        run_dir: The emobpy tool's output for this grid.
+        manifest: The manifest the files are verified against: the committed
+            one by default, so that the data is provably the dataset of record;
+            ``None`` for the run's own (synthetic test data).
+    """
+
+    run_dir: str = "data/raw/emobpy/2016-home-only"
+    manifest: str | None = "configs/ev/emobpy-2016-home-only.manifest.json"
+
+
+DEFAULT_EV = EvSizing()
+"""The 2016 emobpy run, home charging only (D17)."""
+
+
+def _ev_chargers(model: GridModel, frame, sizing: EvSizing):
+    """Charge point models and their session tables on the simulation index.
+
+    Returns:
+        ``(assets, sessions)``: the models, and a mapping from asset id to its
+        :class:`~lvgrid_rl.data.sources.ev_sessions.SessionTable`.
+    """
+    import pandas as pd
+
+    from lvgrid_rl.data.sources.ev_sessions import (
+        home_sessions,
+        read_emobpy_run,
+        scale_to_annual,
+    )
+    from lvgrid_rl.data.sources.simbench import ev_rated_power_kw
+
+    vehicles = read_emobpy_run(sizing.run_dir, sizing.manifest)
+    hours = (frame.index[1] - frame.index[0]) / pd.Timedelta("1h")
+    assets, sessions = [], {}
+    for position, element_index in enumerate(model.net.load.index):
+        row = model.net.load.iloc[position]
+        profile = str(row.get("profile", "") or "")
+        if categorize(profile) is not AssetCategory.EV_CHARGER:
+            continue
+        asset_id = f"load:{element_index}"
+        if asset_id not in vehicles:
+            raise ValueError(
+                f"{asset_id} has no vehicle in {sizing.run_dir}; the run was made "
+                "for another grid (scripts/list_charge_points.py, tools/emobpy)"
+            )
+        vehicle = vehicles[asset_id]
+        p_max_mw = ev_rated_power_kw(profile) / 1000.0
+        if abs(vehicle.nominal_power_kw / 1000.0 - p_max_mw) > 1e-9:
+            raise ValueError(
+                f"{asset_id}: the run charges at {vehicle.nominal_power_kw} kW, "
+                f"the grid's profile {profile} says {p_max_mw * 1000} kW"
+            )
+        table = home_sessions(vehicle.frame, frame.index, p_max_mw)
+        target_mwh = float(frame[asset_id].sum() * hours)
+        sessions[asset_id] = scale_to_annual(table, target_mwh, frame.index)
+        assets.append(
+            EvCharger(
+                asset_id=asset_id,
+                bus=int(row["bus"]),
+                ratings=AssetRatings(p_min_mw=0.0, p_max_mw=p_max_mw),
+            )
+        )
+    return assets, sessions
 
 
 def _heat_pumps(model: GridModel, frame, sizing: HeatPumpSizing, evaluate: bool):
@@ -269,6 +348,7 @@ def make_env(
     seed: int | None = None,
     storage: StorageSizing | None = None,
     heat_pumps: HeatPumpSizing | None = None,
+    ev: EvSizing | None = None,
 ) -> LVGridEnv:
     """Build an environment for one grid, scenario and evaluation set.
 
@@ -287,6 +367,8 @@ def make_env(
             curtailment alone -- the M3 setup.
         heat_pumps: Make the grid's heat pumps controllable, or ``None`` to
             leave them on their SimBench profiles as uncontrolled load.
+        ev: Make the grid's charge points controllable with emobpy sessions,
+            or ``None`` to leave them on their SimBench profiles.
     """
     config = config or EnvConfig()
     timebase = TimeBase(config.sim_dt_min, config.control_dt_min)
@@ -326,6 +408,11 @@ def make_env(
         for key, values in demand.items():
             frame[key] = values
 
+    ev_sessions = None
+    if ev is not None:
+        chargers, ev_sessions = _ev_chargers(model, frame, ev)
+        assets += chargers
+
     controlled = {a.asset_id for a in assets}
     uncontrolled = {
         name: frame[name].to_numpy()
@@ -362,4 +449,5 @@ def make_env(
         config=config,
         seed=seed,
         ratio_series=ratio_series,
+        ev_sessions=ev_sessions,
     )

@@ -62,6 +62,13 @@ class EpisodeResult:
     """Heat demand no buffer could serve."""
     hp_switches: int = 0
     """Compressor switching events, on and off, summed over heat pumps."""
+    ev_unserved_mwh: float = 0.0
+    """Energy vehicles still wanted when they left. Sessions that continue past
+    the end of the episode are not counted."""
+    ev_charged_mwh: float = 0.0
+    """Energy delivered to vehicles."""
+    ev_sessions_short: int = 0
+    """Sessions that ended with energy missing."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +124,9 @@ class RunResult:
             "hp_comfort_kh": self.total("hp_comfort_kh"),
             "hp_unserved_heat_mwh": self.total("hp_unserved_heat_mwh"),
             "hp_switches": self.total("hp_switches"),
+            "ev_unserved_mwh": self.total("ev_unserved_mwh"),
+            "ev_charged_mwh": self.total("ev_charged_mwh"),
+            "ev_sessions_short": self.total("ev_sessions_short"),
             **{
                 f"clipping/{key}": float(
                     sum(e.clipping_counts.get(key, 0) for e in self.episodes)
@@ -190,6 +200,9 @@ def run_controller(
         comfort = 0.0
         unserved_heat = 0.0
         switches = 0
+        ev_unserved = 0.0
+        ev_charged = 0.0
+        ev_short = 0
         clipping: dict[str, int] = {}
         decision_ns = 0
         steps = 0
@@ -215,6 +228,9 @@ def run_controller(
             comfort += step_info.get("hp_comfort_kh", 0.0)
             unserved_heat += step_info.get("hp_unserved_heat_mwh", 0.0)
             switches += int(step_info.get("hp_switches", 0))
+            ev_unserved += step_info.get("ev_unserved_mwh", 0.0)
+            ev_charged += step_info.get("ev_charged_mwh", 0.0)
+            ev_short += int(step_info.get("ev_sessions_short", 0))
             for key, value in step_info.items():
                 if key.startswith("clipping/"):
                     cause = key.removeprefix("clipping/")
@@ -253,6 +269,9 @@ def run_controller(
                 hp_comfort_kh=comfort,
                 hp_unserved_heat_mwh=unserved_heat,
                 hp_switches=switches,
+                ev_unserved_mwh=ev_unserved,
+                ev_charged_mwh=ev_charged,
+                ev_sessions_short=ev_short,
             )
         )
 
