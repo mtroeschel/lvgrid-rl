@@ -96,6 +96,14 @@ class EpisodeSampler:
         n_buses: Number of assessed connection points.
         budget_windows: Permitted violating windows per bus and week.
         spec: Episode configuration.
+        steps_per_control: Simulation steps per control step. Training episodes
+            start on a multiple of it from the start of the week, so that every
+            control step covers whole source intervals. Until M4 they started at
+            any simulation step: with 15-minute data at 5 minutes, two thirds of
+            the episodes put a jump of the data inside every control step, and
+            the PV setpoint, limited to the available power of the first
+            sub-step, curtailed what rose in the next one -- 46 to 97 kWh in two
+            days under ``do_nothing``, which never curtails.
     """
 
     def __init__(
@@ -107,7 +115,11 @@ class EpisodeSampler:
         n_buses: int,
         budget_windows: int,
         spec: EpisodeSpec | None = None,
+        steps_per_control: int = 1,
     ) -> None:
+        if steps_per_control < 1:
+            raise ValueError("steps_per_control must be at least 1")
+        self.steps_per_control = steps_per_control
         self.split = split
         self.set_name = set_name
         self.spec = spec or EpisodeSpec()
@@ -161,7 +173,10 @@ class EpisodeSampler:
         start, end = self._week_bounds[week]
         n_steps = self.spec.length_days * self.steps_per_day
         latest = max(end - n_steps, start)
-        start_step = int(rng.integers(start, latest + 1)) if latest > start else start
+        # On the control grid, counted from the start of the week -- which is
+        # midnight and therefore on every source grid.
+        slots = (latest - start) // self.steps_per_control
+        start_step = start + self.steps_per_control * int(rng.integers(0, slots + 1))
 
         if self.spec.randomise_budget:
             frac = float(rng.uniform(0.0, self.spec.max_initial_budget_frac))

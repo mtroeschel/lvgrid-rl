@@ -344,6 +344,46 @@ class LVGridEnv(gym.Env):
                 out[asset_id] = self._ev_sessions[asset_id][k]
         return out
 
+    def _stored_energy(self) -> dict[str, float]:
+        """Energy held by batteries and heat pump buffers, by kind."""
+        out = {"bess": 0.0, "hp": 0.0}
+        for asset in self.assets:
+            if asset.kind in out:
+                out[asset.kind] += self._asset_states[asset.asset_id].energy_mwh
+        return out
+
+    def _ev_deferred_at_end(self, t_end: int) -> float:
+        """EV energy that was due by the end of the episode and is not delivered.
+
+        The end of an episode is treated like its start: a session under way is
+        split pro rata over its stay, and the share before ``t_end`` belongs to
+        this episode. A vehicle still needing more than the share after the end
+        has been charged too late *for this episode* -- energy a controller
+        would otherwise move out of the assessment for free by charging late.
+        For a session arriving in the episode the share after the end is
+        ``E (d - t_end) / (d - a)``; for one under way at the start it is the
+        same expression, because the start rule gave it the share after the
+        start.
+        """
+        deferred = 0.0
+        for asset in self.assets:
+            if asset.kind != "ev":
+                continue
+            state = self._asset_states[asset.asset_id]
+            if not state.connected:
+                continue
+            session = next(
+                s
+                for s in self._ev_sessions[asset.asset_id]
+                if s.arrival_t_index == state.arrival_t_index
+            )
+            after = session.energy_mwh * (
+                (session.departure_t_index - t_end)
+                / (session.departure_t_index - session.arrival_t_index)
+            )
+            deferred += max(state.need_mwh - after, 0.0)
+        return deferred
+
     def _ev_states_at_start(self, t: int) -> None:
         """Connect the vehicles whose sessions are under way when an episode starts.
 
@@ -449,6 +489,7 @@ class LVGridEnv(gym.Env):
             asset.asset_id: asset.initial_state(self._rng) for asset in self.assets
         }
         self._ev_states_at_start(self._t)
+        self._energy_at_start = self._stored_energy()
 
         setpoints = self._setpoints_for(self._t)
         for asset in self.assets:
@@ -698,6 +739,16 @@ class LVGridEnv(gym.Env):
         )
         terminated = False
 
+        # Accounting at the end of an episode, for the KPIs only: in training
+        # the value function bootstraps past a truncation, and a penalty here
+        # would count the future twice.
+        ev_deferred_mwh = 0.0
+        energy_change = {"bess": 0.0, "hp": 0.0}
+        if truncated:
+            ev_deferred_mwh = self._ev_deferred_at_end(self._t)
+            at_end = self._stored_energy()
+            energy_change = {k: at_end[k] - self._energy_at_start[k] for k in at_end}
+
         info: dict[str, Any] = {
             "action_mask": self.safety.action_mask(state, info_set),
             "intervened": intervention.intervened,
@@ -714,6 +765,9 @@ class LVGridEnv(gym.Env):
             "ev_unserved_mwh": ev_unserved_mwh,
             "ev_charged_mwh": ev_charged_mwh,
             "ev_sessions_short": ev_sessions_short,
+            "ev_deferred_mwh": ev_deferred_mwh,
+            "bess_energy_change_mwh": energy_change["bess"],
+            "hp_buffer_change_mwh": energy_change["hp"],
         }
         # A limitation applied by the physics inside the hold (the battery
         # management cut-off) counts once per asset and control step, like one

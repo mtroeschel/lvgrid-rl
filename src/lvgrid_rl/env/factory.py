@@ -434,6 +434,7 @@ def make_env(
         n_buses=model.n_evaluated_buses,
         budget_windows=int(0.05 * 1008),
         spec=episode_spec,
+        steps_per_control=config.control_dt_min // config.sim_dt_min,
     )
 
     series_ids = tuple(frame.columns)

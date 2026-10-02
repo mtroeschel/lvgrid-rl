@@ -314,3 +314,25 @@ def test_the_runner_reports_storage_kpis_and_clipping_by_cause() -> None:
     assert summary["asset_loss_mwh"] > 0.0
     assert summary["clipping/bess/p_mw_soc"] > 0
     assert summary["clipped_steps"] > 0
+
+
+def test_the_change_in_stored_energy_is_reported_at_the_end_of_an_episode() -> None:
+    """What a battery holds at the end is not free.
+
+    A negative change is energy the episode borrowed from the next.
+    """
+    spec = EpisodeSpec(mode=EpisodeMode.TRAIN, length_days=1, randomise_budget=False)
+    env = make_env(seed=1, episode_spec=spec, set_name="test", storage=DEFAULT_STORAGE)
+    env.reset(seed=1)
+    batteries = [a for a in env.assets if a.kind == "bess"]
+    before = sum(env._asset_states[b.asset_id].energy_mwh for b in batteries)  # noqa: SLF001
+    reported = []
+    while True:
+        *_, truncated, info = env.step(_charge_at_noon(env))
+        reported.append(info["bess_energy_change_mwh"])
+        if truncated:
+            break
+    after = sum(env._asset_states[b.asset_id].energy_mwh for b in batteries)  # noqa: SLF001
+    assert reported[-1] == pytest.approx(after - before)
+    assert reported[-1] > 0.0
+    assert all(value == 0.0 for value in reported[:-1]), "only at the end"

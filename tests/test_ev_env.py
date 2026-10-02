@@ -293,3 +293,53 @@ def test_the_dataset_of_record_builds_and_matches_its_manifest() -> None:
     assert len(sessions) == 7
     assert 240 <= min(len(s) for s in sessions.values())
     assert max(len(s) for s in sessions.values()) <= 300
+
+
+def _to_the_end(env, controller):
+    while True:
+        info_set = env._information_set(env._t, env._last_grid)  # noqa: SLF001
+        *_, truncated, info = env.step(controller.act(info_set))
+        if truncated:
+            return info
+
+
+def test_energy_due_by_the_end_but_not_delivered_is_reported(sizing) -> None:
+    """Charging late must not move energy out of the assessment for free.
+
+    A one-day episode ends while the vehicles are home; offering nothing, each
+    still needs more than the share of its session that falls after the end.
+    """
+    spec = EpisodeSpec(mode=EpisodeMode.TRAIN, length_days=1, randomise_budget=False)
+    e = make_env(seed=1, set_name="test", episode_spec=spec, ev=sizing)
+    e.reset(seed=1)
+    info = _to_the_end(e, _AllOff(e))
+    expected = 0.0
+    for charger in _evs(e):
+        state = e._asset_states[charger.asset_id]  # noqa: SLF001
+        if not state.connected:
+            continue
+        session = next(
+            s
+            for s in e._ev_sessions[charger.asset_id]  # noqa: SLF001
+            if s.arrival_t_index == state.arrival_t_index
+        )
+        after = (
+            session.energy_mwh
+            * (session.departure_t_index - e._t)
+            / (  # noqa: SLF001
+                session.departure_t_index - session.arrival_t_index
+            )
+        )
+        expected += max(state.need_mwh - after, 0.0)
+    assert info["ev_deferred_mwh"] == pytest.approx(expected)
+    assert expected > 0.0, "the episode must end during a stay for this test"
+
+
+def test_charging_on_arrival_defers_nothing(sizing) -> None:
+    from lvgrid_rl.baselines.methods import DoNothing
+
+    spec = EpisodeSpec(mode=EpisodeMode.TRAIN, length_days=1, randomise_budget=False)
+    e = make_env(seed=1, set_name="test", episode_spec=spec, ev=sizing)
+    e.reset(seed=1)
+    info = _to_the_end(e, DoNothing(e.mapper))
+    assert info["ev_deferred_mwh"] == pytest.approx(0.0, abs=1e-12)

@@ -69,6 +69,14 @@ class EpisodeResult:
     """Energy delivered to vehicles."""
     ev_sessions_short: int = 0
     """Sessions that ended with energy missing."""
+    ev_deferred_mwh: float = 0.0
+    """EV energy due by the end of the episode, pro rata, but not delivered:
+    charging moved out of the assessment (``LVGridEnv._ev_deferred_at_end``)."""
+    bess_energy_change_mwh: float = 0.0
+    """Energy in the batteries at the end of the episode minus at its start. A
+    negative value is energy the episode borrowed from the next."""
+    hp_buffer_change_mwh: float = 0.0
+    """The same for the heat pump buffers."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +135,9 @@ class RunResult:
             "ev_unserved_mwh": self.total("ev_unserved_mwh"),
             "ev_charged_mwh": self.total("ev_charged_mwh"),
             "ev_sessions_short": self.total("ev_sessions_short"),
+            "ev_deferred_mwh": self.total("ev_deferred_mwh"),
+            "bess_energy_change_mwh": self.total("bess_energy_change_mwh"),
+            "hp_buffer_change_mwh": self.total("hp_buffer_change_mwh"),
             **{
                 f"clipping/{key}": float(
                     sum(e.clipping_counts.get(key, 0) for e in self.episodes)
@@ -203,6 +214,9 @@ def run_controller(
         ev_unserved = 0.0
         ev_charged = 0.0
         ev_short = 0
+        ev_deferred = 0.0
+        bess_change = 0.0
+        hp_change = 0.0
         clipping: dict[str, int] = {}
         decision_ns = 0
         steps = 0
@@ -231,6 +245,9 @@ def run_controller(
             ev_unserved += step_info.get("ev_unserved_mwh", 0.0)
             ev_charged += step_info.get("ev_charged_mwh", 0.0)
             ev_short += int(step_info.get("ev_sessions_short", 0))
+            ev_deferred += step_info.get("ev_deferred_mwh", 0.0)
+            bess_change += step_info.get("bess_energy_change_mwh", 0.0)
+            hp_change += step_info.get("hp_buffer_change_mwh", 0.0)
             for key, value in step_info.items():
                 if key.startswith("clipping/"):
                     cause = key.removeprefix("clipping/")
@@ -272,6 +289,9 @@ def run_controller(
                 ev_unserved_mwh=ev_unserved,
                 ev_charged_mwh=ev_charged,
                 ev_sessions_short=ev_short,
+                ev_deferred_mwh=ev_deferred,
+                bess_energy_change_mwh=bess_change,
+                hp_buffer_change_mwh=hp_change,
             )
         )
 

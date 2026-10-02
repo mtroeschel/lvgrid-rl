@@ -66,6 +66,13 @@ under which the multiplier can only grow.
   extras are named: `uv sync --locked --extra sim --extra env --extra rl`.
 - **`sim_dt` is restricted to 1 and 5 minutes.** EN 50160 permits {1, 2, 5, 10},
   but the 15-minute SimBench series cannot produce 2 or 10 without a grid offset.
+- **Training episodes start on the control grid** (since M4 4.5). Until then
+  two thirds started between 15-minute data points and `do_nothing` curtailed
+  PV in them; policies up to M4.4 were trained that way, their evaluations
+  (always aligned) are unaffected.
+- **Read the end-of-episode KPIs with any storage**: `ev_deferred_mwh`,
+  `bess_energy_change_mwh`, `hp_buffer_change_mwh`. A controller can look good
+  by charging after the week or ending it with empty storage.
 - **Evaluation must use `EpisodeMode.EVALUATE`** — complete weeks, fixed order,
   zero budget. Sampled episodes differ per seed and cannot be aggregated; that
   bug once made deterministic baselines differ between runs.
